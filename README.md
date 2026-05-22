@@ -9,10 +9,6 @@
 - `pipeline.py`: 레이아웃 생성부터 스트로크 렌더링까지 한 번에 실행합니다.
 - `simulate_drawing.py`, `skeletonizer.py`, `stroke_extractor.py`: 핵심 스트로크 생성 모듈입니다.
 
-## 실행 환경
-
-- Python 3.10 이상
-- 의존성 설치:
 
 ```bash
 pip install -r requirements.txt
