@@ -16,10 +16,12 @@ pip install -r requirements.txt
 
 ## 빠른 시작
 
+프로젝트 루트에서 실행하세요.
+
 전체 파이프라인 실행:
 
 ```bash
-python pipeline.py --input path/to/input_image.png
+python src/pipeline.py --input path/to/input_image.png
 ```
 
 자주 사용하는 옵션:
