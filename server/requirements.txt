@@ -6,3 +6,9 @@ python-multipart
 python-dotenv
 aiofiles
 pydantic-settings
+numpy
+opencv-python-headless
+matplotlib
+scikit-image
+paddleocr
+paddlepaddle
