@@ -22,9 +22,11 @@ def get_next_job(db: Session = Depends(get_db), _=Depends(verify_token)):
 
     update_status(db, job.id, "assigned_to_worker")
     return {
-        "job_id": job.id,
-        "status": "assigned_to_worker",
-        "strokes_url": f"/api/worker/jobs/{job.id}/strokes"
+        "job": {
+            "job_id": job.id,
+            "status": "assigned_to_worker",
+            "strokes_url": f"/api/worker/jobs/{job.id}/strokes"
+        }
     }
 
 @router.get("/jobs/{job_id}/strokes")
