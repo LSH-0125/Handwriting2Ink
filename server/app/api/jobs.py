@@ -60,7 +60,9 @@ def get_job_status(job_id: str, db: Session = Depends(get_db)):
     return {
         "job_id": job.id,
         "status": job.status,
-        "binary_ready": job.status == "bin_ready"
+        "binary_ready": job.status == "bin_ready",
+        "error_code": job.error_code,
+        "error_message": job.error_message,
     }
 
 
