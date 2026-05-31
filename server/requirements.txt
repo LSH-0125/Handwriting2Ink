@@ -11,4 +11,4 @@ opencv-python-headless
 matplotlib
 scikit-image
 paddleocr
-paddlepaddle
+paddlepaddle==2.6.1
