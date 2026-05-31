@@ -22,7 +22,7 @@ import matplotlib.pyplot as plt
 from collections import defaultdict, deque
 
 # skeletonizer.py의 기능을 모듈로 사용
-from src.skeletonizer import load_and_preprocess, skeletonize_zhang
+from skeletonizer import load_and_preprocess, skeletonize_zhang
 
 
 # ============================================================

@@ -3,7 +3,7 @@
 The active implementation lives in `skeletonizer1.py`.
 """
 
-from src.skeletonizer import load_and_preprocess, skeletonize_zhang
+from skeletonizer import load_and_preprocess, skeletonize_zhang
 
 
 def method_skeletonize_zhang(binary):
