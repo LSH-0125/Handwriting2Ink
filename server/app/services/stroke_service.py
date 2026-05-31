@@ -8,7 +8,8 @@ def run_pipeline(job_id: str, input_path: str, output_dir: str) -> str:
         "python", "pipeline/pipeline.py",
         "--input", input_path,
         "--output_dir", output_dir,
-        "--save_stroke_data"
+        "--save_stroke_data",
+        "--overwrite"
     ], check=True)
 
     strokes_path = os.path.join(output_dir, "crop_stroke_composite_strokes.json")
