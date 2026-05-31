@@ -8,6 +8,7 @@ RUN apt-get update && apt-get install -y \
     libglib2.0-0 \
     libgomp1 \
     && ldconfig \
+    && find / -name "libgomp*" 2>/dev/null \
     && rm -rf /var/lib/apt/lists/*
 
 RUN pip install --no-cache-dir -r requirements.txt
