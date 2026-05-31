@@ -13,6 +13,20 @@ from app.config import settings
 
 router = APIRouter(prefix="/api/jobs")
 
+@router.get("")
+def list_jobs(db: Session = Depends(get_db)):
+    jobs = db.query(Job).order_by(Job.created_at.desc()).limit(20).all()
+    return [
+        {
+            "job_id": job.id,
+            "status": job.status,
+            "created_at": str(job.created_at),
+            "error_code": job.error_code,
+            "error_message": job.error_message,
+        }
+        for job in jobs
+    ]
+
 @router.post("")
 async def upload_image(file: UploadFile = File(...), db: Session = Depends(get_db)):
     job = create_job(db)
