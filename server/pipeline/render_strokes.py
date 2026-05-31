@@ -11,8 +11,8 @@ os.environ.setdefault("MPLCONFIGDIR", str(PROJECT_ROOT / ".mplconfig"))
 os.environ.setdefault("XDG_CACHE_HOME", str(PROJECT_ROOT / ".xdg_cache"))
 
 from simulate_drawing import save_black_strokes_image, save_result_image
-from src.skeletonizer import load_and_preprocess, skeletonize_zhang
-from src.stroke_extractor import extract_strokes
+from skeletonizer import load_and_preprocess, skeletonize_zhang
+from stroke_extractor import extract_strokes
 
 
 def parse_args():
