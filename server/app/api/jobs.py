@@ -1,6 +1,7 @@
 import os
 import shutil
 import asyncio
+from datetime import datetime, timezone
 from fastapi import APIRouter, UploadFile, File, Depends, HTTPException
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
@@ -49,8 +50,12 @@ async def run_extraction(job_id, input_path, output_dir, db):
         db.commit()
         update_status(db, job_id, "stroke_ready", "strokes.json 생성 완료")
     except Exception as e:
-        update_status(db, job_id, "failed", str(e))
-
+        job = db.query(Job).filter(Job.id == job_id).first()
+        job.error_code = "STROKE_EXTRACTION_FAILED"
+        job.error_message = str(e)
+        job.status = "failed"
+        job.updated_at = datetime.now(timezone.utc)
+        db.commit()
 
 @router.get("/{job_id}")
 def get_job_status(job_id: str, db: Session = Depends(get_db)):
