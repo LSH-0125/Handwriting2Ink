@@ -13,6 +13,7 @@ from app.config import settings
 
 router = APIRouter(prefix="/api/jobs")
 
+
 @router.get("")
 def list_jobs(db: Session = Depends(get_db)):
     jobs = db.query(Job).order_by(Job.created_at.desc()).limit(20).all()
@@ -26,6 +27,7 @@ def list_jobs(db: Session = Depends(get_db)):
         }
         for job in jobs
     ]
+
 
 @router.post("")
 async def upload_image(file: UploadFile = File(...), db: Session = Depends(get_db)):
@@ -46,7 +48,6 @@ async def upload_image(file: UploadFile = File(...), db: Session = Depends(get_d
     job.status = "uploaded"
     db.commit()
 
-    # 파이프라인 백그라운드 실행
     asyncio.create_task(run_extraction(job.id, input_path, output_dir, db))
 
     return {"job_id": job.id, "status": "uploaded"}
@@ -71,15 +72,19 @@ async def run_extraction(job_id, input_path, output_dir, db):
         job.updated_at = datetime.now(timezone.utc)
         db.commit()
 
+
 @router.get("/{job_id}")
 def get_job_status(job_id: str, db: Session = Depends(get_db)):
     job = db.query(Job).filter(Job.id == job_id).first()
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
+
+    binary_exists = bool(job.binary_path and os.path.exists(job.binary_path))
+
     return {
         "job_id": job.id,
         "status": job.status,
-        "binary_ready": job.status == "bin_ready",
+        "binary_ready": job.status == "bin_ready" and binary_exists,
         "error_code": job.error_code,
         "error_message": job.error_message,
     }
@@ -88,8 +93,12 @@ def get_job_status(job_id: str, db: Session = Depends(get_db)):
 @router.get("/{job_id}/binary")
 def download_binary(job_id: str, db: Session = Depends(get_db)):
     job = db.query(Job).filter(Job.id == job_id).first()
-    if not job or job.status != "bin_ready":
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if job.status != "bin_ready":
         raise HTTPException(status_code=404, detail="Binary not ready")
+    if not job.binary_path or not os.path.exists(job.binary_path):
+        raise HTTPException(status_code=404, detail="Binary file not found on server")
     return FileResponse(
         job.binary_path,
         media_type="application/octet-stream",
