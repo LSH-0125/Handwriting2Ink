@@ -27,8 +27,8 @@ def _set_korean_font():
 _set_korean_font()
 
 # 기존 모듈 임포트
-from src.skeletonizer import load_and_preprocess, skeletonize_zhang
-from src.stroke_extractor import extract_strokes, STROKE_COLORS, STROKE_COLORS_BGR
+from skeletonizer import load_and_preprocess, skeletonize_zhang
+from stroke_extractor import extract_strokes, STROKE_COLORS, STROKE_COLORS_BGR
 
 def save_result_image(strokes, img, save_path, thickness=None):
     """3패널 결과 이미지를 저장합니다.
