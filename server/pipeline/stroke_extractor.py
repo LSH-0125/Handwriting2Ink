@@ -120,7 +120,7 @@ def split_into_connected_components(graph, pixel_set):
 # 2. Stroke 추출 알고리즘
 # ============================================================
 
-def extract_strokes(skeleton, min_stroke_length=3, merge_angle=60, image_gray=None, rdp_epsilon=1.5):
+def extract_strokes(skeleton, min_stroke_length=3, merge_angle=60, image_gray=None, rdp_epsilon=1.0):
     """스켈레톤에서 좌표열(stroke sequences)을 추출합니다.
     
     알고리즘:
@@ -296,6 +296,8 @@ def rdp_simplify(stroke: np.ndarray, epsilon: float) -> np.ndarray:
     직선으로 근사했을 때 epsilon 픽셀 이내로 벗어나지 않는 중간 점들을 제거합니다.
     곡선 구간의 형태는 보존하면서 직선 구간의 지글거림을 제거하는 데 효과적입니다.
 
+    재귀 대신 명시적 스택을 사용하므로 긴 stroke에서도 스택 오버플로우가 없습니다.
+
     Args:
         stroke: (N, 2) 형태의 (x, y) 좌표 배열
         epsilon: 허용 오차 (픽셀). 클수록 더 많이 단순화됩니다.
@@ -304,41 +306,44 @@ def rdp_simplify(stroke: np.ndarray, epsilon: float) -> np.ndarray:
     Returns:
         단순화된 (M, 2) 좌표 배열 (M <= N)
     """
-    if len(stroke) < 3:
+    n = len(stroke)
+    if n < 3:
         return stroke
 
-    def _rdp(points: np.ndarray, eps: float) -> list[int]:
-        """재귀적으로 유지할 인덱스 목록을 반환합니다."""
-        start, end = points[0], points[-1]
-        n = len(points)
+    # 유지할 점을 표시하는 boolean 마스크
+    keep = np.zeros(n, dtype=bool)
+    keep[0] = True
+    keep[-1] = True
 
-        # 시작~끝 선분과 각 점 사이의 수직 거리 계산
-        line_vec = end - start
+    # 처리할 구간을 (start_idx, end_idx) 쌍으로 스택에 적재
+    stack = [(0, n - 1)]
+
+    while stack:
+        start, end = stack.pop()
+        if end - start < 2:
+            continue
+
+        seg = stroke[start:end + 1]
+        line_vec = seg[-1] - seg[0]
         line_len = np.linalg.norm(line_vec)
 
         if line_len == 0:
-            # 시작과 끝이 같은 점 → 시작점과 가장 먼 점만 유지
-            dists = np.linalg.norm(points - start, axis=1)
-            idx = int(np.argmax(dists))
-            if dists[idx] < eps:
-                return [0, n - 1]
-            left = _rdp(points[:idx + 1], eps)
-            right = _rdp(points[idx:], eps)
-            return left[:-1] + [i + idx for i in right]
+            dists = np.linalg.norm(seg - seg[0], axis=1)
+        else:
+            # 2D 외적: (line_vec[0])*(dy) - (line_vec[1])*(dx)
+            diff = seg[0] - seg
+            dists = np.abs(line_vec[0] * diff[:, 1] - line_vec[1] * diff[:, 0]) / line_len
 
-        # 벡터 외적을 이용한 수직 거리
-        cross = np.abs(np.cross(line_vec, start - points) / line_len)
-        idx = int(np.argmax(cross))
+        # 구간 내 상대 인덱스 → 전체 인덱스로 변환
+        rel_idx = int(np.argmax(dists))
+        abs_idx = start + rel_idx
 
-        if cross[idx] < eps:
-            return [0, n - 1]
+        if dists[rel_idx] >= epsilon:
+            keep[abs_idx] = True
+            stack.append((start, abs_idx))
+            stack.append((abs_idx, end))
 
-        left = _rdp(points[:idx + 1], eps)
-        right = _rdp(points[idx:], eps)
-        return left[:-1] + [i + idx for i in right]
-
-    indices = _rdp(stroke, epsilon)
-    return stroke[indices]
+    return stroke[keep]
 
 
 def order_strokes(strokes, row_tolerance=20):

@@ -93,8 +93,8 @@ def parse_args():
     parser.add_argument(
         "--rdp_epsilon",
         type=float,
-        default=1.5,
-        help="RDP 단순화 허용 오차 (픽셀). 클수록 획이 더 단순해짐. 0 이하면 비활성화 (기본: 1.5)",
+        default=1.0,
+        help="RDP 단순화 허용 오차 (픽셀). 클수록 획이 더 단순해짐. 0 이하면 비활성화 (기본: 1.0)",
     )
     return parser.parse_args()
 
@@ -292,7 +292,7 @@ def preprocess_crop_spec(spec: dict, reference_image: np.ndarray, crop_scale: fl
     return crop_image, scaled_crop, gray, binary, skeleton
 
 
-def extract_crop_strokes(spec: dict, reference_image: np.ndarray, crop_scale: float, rdp_epsilon: float = 1.5):
+def extract_crop_strokes(spec: dict, reference_image: np.ndarray, crop_scale: float, rdp_epsilon: float = 1.0):
     _, _, gray, binary, skeleton = preprocess_crop_spec(spec, reference_image, crop_scale)
     strokes = extract_strokes(skeleton, image_gray=gray, rdp_epsilon=rdp_epsilon)
     return downscale_strokes(strokes, crop_scale)
@@ -323,7 +323,7 @@ def save_crop_debug_outputs(
     reference_image: np.ndarray,
     crop_scale: float,
     region_source: str,
-    rdp_epsilon: float = 1.5,
+    rdp_epsilon: float = 1.0,
 ):
     debug_dir = pilot_dir / f"crop_debug_{region_source}_scale{crop_scale:g}"
     debug_dir.mkdir(parents=True, exist_ok=True)
@@ -445,7 +445,7 @@ def save_merged_debug_outputs(
     region_source: str,
     black_thickness: int,
     result_thickness,
-    rdp_epsilon: float = 1.5,
+    rdp_epsilon: float = 1.0,
 ):
     merged_canvas, pasted = build_merged_crop_canvas(reference_image, crop_specs)
     prefix_label = mode if region_source == "ocr_merged" else f"{region_source}_{mode}"
