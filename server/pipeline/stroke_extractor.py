@@ -120,7 +120,7 @@ def split_into_connected_components(graph, pixel_set):
 # 2. Stroke 추출 알고리즘
 # ============================================================
 
-def extract_strokes(skeleton, min_stroke_length=3, merge_angle=60, image_gray=None, rdp_epsilon=1.0):
+def extract_strokes(skeleton, min_stroke_length=3, merge_angle=60, image_gray=None, smooth_window=5):
     """스켈레톤에서 좌표열(stroke sequences)을 추출합니다.
     
     알고리즘:
@@ -136,8 +136,8 @@ def extract_strokes(skeleton, min_stroke_length=3, merge_angle=60, image_gray=No
         min_stroke_length: 최소 획 길이 (이보다 짧은 세그먼트 무시)
         merge_angle: 병합 각도 임계값 (도).
         image_gray: 서브픽셀 강도(Intensity) 조회를 위한 원본 Gray 이미지 (선택)
-        rdp_epsilon: RDP 단순화 허용 오차 (픽셀). 0 이하면 단순화 비활성화.
-                     1.0~2.0 권장. 클수록 점이 적어지고 획이 더 직선에 가까워짐.
+        smooth_window: 이동 평균 윈도우 크기 (홀수 권장). 클수록 더 부드러워짐.
+                       3~7 권장. 0 이하면 비활성화.
     
     Returns:
         strokes: list of np.ndarray, 각각 shape (N, 2), (x, y) 좌표
@@ -230,14 +230,9 @@ def extract_strokes(skeleton, min_stroke_length=3, merge_angle=60, image_gray=No
             stroke = np.array([(x, y) for y, x in segment])
             strokes.append(stroke)
 
-    # 7. RDP 단순화 — 지글거림 제거 (epsilon > 0 일 때만)
-    if rdp_epsilon > 0:
-        simplified = []
-        for stroke in strokes:
-            s = rdp_simplify(stroke, rdp_epsilon)
-            if len(s) >= min_stroke_length:
-                simplified.append(s)
-        strokes = simplified
+    # 7. 이동 평균 스무딩 — 지글거림 제거 (window > 0 일 때만)
+    if smooth_window > 0:
+        strokes = [smooth_stroke(s, smooth_window) for s in strokes]
 
     # 8. 획 순서 정렬 (위→아래, 왼→오른)
     strokes = order_strokes(strokes)
@@ -290,60 +285,36 @@ def _trace_segment(segment, full_graph):
     return ordered
 
 
-def rdp_simplify(stroke: np.ndarray, epsilon: float) -> np.ndarray:
-    """Ramer-Douglas-Peucker 알고리즘으로 좌표열을 단순화합니다.
+def smooth_stroke(stroke: np.ndarray, window: int = 5) -> np.ndarray:
+    """이동 평균으로 stroke 좌표열을 부드럽게 합니다.
 
-    직선으로 근사했을 때 epsilon 픽셀 이내로 벗어나지 않는 중간 점들을 제거합니다.
-    곡선 구간의 형태는 보존하면서 직선 구간의 지글거림을 제거하는 데 효과적입니다.
-
-    재귀 대신 명시적 스택을 사용하므로 긴 stroke에서도 스택 오버플로우가 없습니다.
+    각 점을 주변 window개 점의 평균으로 대체합니다.
+    시작점과 끝점은 원본 위치를 유지하여 획의 연결 위치가 틀어지지 않습니다.
 
     Args:
         stroke: (N, 2) 형태의 (x, y) 좌표 배열
-        epsilon: 허용 오차 (픽셀). 클수록 더 많이 단순화됩니다.
-                 필기 재생용으로는 1.0~2.0 권장.
+        window: 이동 평균 윈도우 크기. 클수록 더 많이 스무딩됨. 홀수 권장.
+                3=약하게, 5=중간(기본), 7=강하게
 
     Returns:
-        단순화된 (M, 2) 좌표 배열 (M <= N)
+        스무딩된 (N, 2) 좌표 배열 (점 수는 동일하게 유지)
     """
-    n = len(stroke)
-    if n < 3:
+    if len(stroke) < window:
         return stroke
 
-    # 유지할 점을 표시하는 boolean 마스크
-    keep = np.zeros(n, dtype=bool)
-    keep[0] = True
-    keep[-1] = True
+    kernel = np.ones(window) / window
+    half = window // 2
 
-    # 처리할 구간을 (start_idx, end_idx) 쌍으로 스택에 적재
-    stack = [(0, n - 1)]
+    xs = np.convolve(stroke[:, 0].astype(float), kernel, mode='same')
+    ys = np.convolve(stroke[:, 1].astype(float), kernel, mode='same')
 
-    while stack:
-        start, end = stack.pop()
-        if end - start < 2:
-            continue
+    # 양 끝 half개 점은 원본 유지 (convolution edge artifact 방지 + 연결 위치 보존)
+    xs[:half] = stroke[:half, 0]
+    xs[-half:] = stroke[-half:, 0]
+    ys[:half] = stroke[:half, 1]
+    ys[-half:] = stroke[-half:, 1]
 
-        seg = stroke[start:end + 1]
-        line_vec = seg[-1] - seg[0]
-        line_len = np.linalg.norm(line_vec)
-
-        if line_len == 0:
-            dists = np.linalg.norm(seg - seg[0], axis=1)
-        else:
-            # 2D 외적: (line_vec[0])*(dy) - (line_vec[1])*(dx)
-            diff = seg[0] - seg
-            dists = np.abs(line_vec[0] * diff[:, 1] - line_vec[1] * diff[:, 0]) / line_len
-
-        # 구간 내 상대 인덱스 → 전체 인덱스로 변환
-        rel_idx = int(np.argmax(dists))
-        abs_idx = start + rel_idx
-
-        if dists[rel_idx] >= epsilon:
-            keep[abs_idx] = True
-            stack.append((start, abs_idx))
-            stack.append((abs_idx, end))
-
-    return stroke[keep]
+    return np.stack([xs, ys], axis=1)
 
 
 def order_strokes(strokes, row_tolerance=20):
