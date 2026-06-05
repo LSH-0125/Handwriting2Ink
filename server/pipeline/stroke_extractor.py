@@ -120,7 +120,7 @@ def split_into_connected_components(graph, pixel_set):
 # 2. Stroke 추출 알고리즘
 # ============================================================
 
-def extract_strokes(skeleton, min_stroke_length=3, merge_angle=60, image_gray=None):
+def extract_strokes(skeleton, min_stroke_length=3, merge_angle=60, image_gray=None, rdp_epsilon=1.5):
     """스켈레톤에서 좌표열(stroke sequences)을 추출합니다.
     
     알고리즘:
@@ -136,6 +136,8 @@ def extract_strokes(skeleton, min_stroke_length=3, merge_angle=60, image_gray=No
         min_stroke_length: 최소 획 길이 (이보다 짧은 세그먼트 무시)
         merge_angle: 병합 각도 임계값 (도).
         image_gray: 서브픽셀 강도(Intensity) 조회를 위한 원본 Gray 이미지 (선택)
+        rdp_epsilon: RDP 단순화 허용 오차 (픽셀). 0 이하면 단순화 비활성화.
+                     1.0~2.0 권장. 클수록 점이 적어지고 획이 더 직선에 가까워짐.
     
     Returns:
         strokes: list of np.ndarray, 각각 shape (N, 2), (x, y) 좌표
@@ -228,7 +230,16 @@ def extract_strokes(skeleton, min_stroke_length=3, merge_angle=60, image_gray=No
             stroke = np.array([(x, y) for y, x in segment])
             strokes.append(stroke)
 
-    # 7. 획 순서 정렬 (위→아래, 왼→오른)
+    # 7. RDP 단순화 — 지글거림 제거 (epsilon > 0 일 때만)
+    if rdp_epsilon > 0:
+        simplified = []
+        for stroke in strokes:
+            s = rdp_simplify(stroke, rdp_epsilon)
+            if len(s) >= min_stroke_length:
+                simplified.append(s)
+        strokes = simplified
+
+    # 8. 획 순서 정렬 (위→아래, 왼→오른)
     strokes = order_strokes(strokes)
     
     return strokes
@@ -277,6 +288,57 @@ def _trace_segment(segment, full_graph):
             break
     
     return ordered
+
+
+def rdp_simplify(stroke: np.ndarray, epsilon: float) -> np.ndarray:
+    """Ramer-Douglas-Peucker 알고리즘으로 좌표열을 단순화합니다.
+
+    직선으로 근사했을 때 epsilon 픽셀 이내로 벗어나지 않는 중간 점들을 제거합니다.
+    곡선 구간의 형태는 보존하면서 직선 구간의 지글거림을 제거하는 데 효과적입니다.
+
+    Args:
+        stroke: (N, 2) 형태의 (x, y) 좌표 배열
+        epsilon: 허용 오차 (픽셀). 클수록 더 많이 단순화됩니다.
+                 필기 재생용으로는 1.0~2.0 권장.
+
+    Returns:
+        단순화된 (M, 2) 좌표 배열 (M <= N)
+    """
+    if len(stroke) < 3:
+        return stroke
+
+    def _rdp(points: np.ndarray, eps: float) -> list[int]:
+        """재귀적으로 유지할 인덱스 목록을 반환합니다."""
+        start, end = points[0], points[-1]
+        n = len(points)
+
+        # 시작~끝 선분과 각 점 사이의 수직 거리 계산
+        line_vec = end - start
+        line_len = np.linalg.norm(line_vec)
+
+        if line_len == 0:
+            # 시작과 끝이 같은 점 → 시작점과 가장 먼 점만 유지
+            dists = np.linalg.norm(points - start, axis=1)
+            idx = int(np.argmax(dists))
+            if dists[idx] < eps:
+                return [0, n - 1]
+            left = _rdp(points[:idx + 1], eps)
+            right = _rdp(points[idx:], eps)
+            return left[:-1] + [i + idx for i in right]
+
+        # 벡터 외적을 이용한 수직 거리
+        cross = np.abs(np.cross(line_vec, start - points) / line_len)
+        idx = int(np.argmax(cross))
+
+        if cross[idx] < eps:
+            return [0, n - 1]
+
+        left = _rdp(points[:idx + 1], eps)
+        right = _rdp(points[idx:], eps)
+        return left[:-1] + [i + idx for i in right]
+
+    indices = _rdp(stroke, epsilon)
+    return stroke[indices]
 
 
 def order_strokes(strokes, row_tolerance=20):

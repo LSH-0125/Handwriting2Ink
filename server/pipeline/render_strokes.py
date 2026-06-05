@@ -90,6 +90,12 @@ def parse_args():
         default=None,
         help="stroke 좌표열 JSON 경로 (기본: <pilot_dir>/crop_stroke_composite_strokes.json)",
     )
+    parser.add_argument(
+        "--rdp_epsilon",
+        type=float,
+        default=1.5,
+        help="RDP 단순화 허용 오차 (픽셀). 클수록 획이 더 단순해짐. 0 이하면 비활성화 (기본: 1.5)",
+    )
     return parser.parse_args()
 
 
@@ -286,9 +292,9 @@ def preprocess_crop_spec(spec: dict, reference_image: np.ndarray, crop_scale: fl
     return crop_image, scaled_crop, gray, binary, skeleton
 
 
-def extract_crop_strokes(spec: dict, reference_image: np.ndarray, crop_scale: float):
+def extract_crop_strokes(spec: dict, reference_image: np.ndarray, crop_scale: float, rdp_epsilon: float = 1.5):
     _, _, gray, binary, skeleton = preprocess_crop_spec(spec, reference_image, crop_scale)
-    strokes = extract_strokes(skeleton, image_gray=gray)
+    strokes = extract_strokes(skeleton, image_gray=gray, rdp_epsilon=rdp_epsilon)
     return downscale_strokes(strokes, crop_scale)
 
 
@@ -317,6 +323,7 @@ def save_crop_debug_outputs(
     reference_image: np.ndarray,
     crop_scale: float,
     region_source: str,
+    rdp_epsilon: float = 1.5,
 ):
     debug_dir = pilot_dir / f"crop_debug_{region_source}_scale{crop_scale:g}"
     debug_dir.mkdir(parents=True, exist_ok=True)
@@ -334,7 +341,7 @@ def save_crop_debug_outputs(
             print(f"[warn] {exc}")
             continue
 
-        strokes = extract_strokes(skeleton, image_gray=gray)
+        strokes = extract_strokes(skeleton, image_gray=gray, rdp_epsilon=rdp_epsilon)
         binary_preview = 255 - binary
         skeleton_preview = 255 - skeleton
         overlay = create_skeleton_overlay(binary, skeleton)
@@ -438,6 +445,7 @@ def save_merged_debug_outputs(
     region_source: str,
     black_thickness: int,
     result_thickness,
+    rdp_epsilon: float = 1.5,
 ):
     merged_canvas, pasted = build_merged_crop_canvas(reference_image, crop_specs)
     prefix_label = mode if region_source == "ocr_merged" else f"{region_source}_{mode}"
@@ -453,7 +461,7 @@ def save_merged_debug_outputs(
     cv2.imwrite(str(merged_path), merged_canvas)
     _, gray, binary = load_and_preprocess(merged_canvas)
     skeleton, _, _ = skeletonize_zhang(binary)
-    strokes = extract_strokes(skeleton, image_gray=gray)
+    strokes = extract_strokes(skeleton, image_gray=gray, rdp_epsilon=rdp_epsilon)
 
     cv2.imwrite(str(binary_path), 255 - binary)
     cv2.imwrite(str(skeleton_path), 255 - skeleton)
@@ -583,6 +591,7 @@ def main():
             args.region_source,
             args.black_thickness,
             args.result_thickness,
+            rdp_epsilon=args.rdp_epsilon,
         )
 
     if args.save_crop_debug:
@@ -598,6 +607,7 @@ def main():
             reference_image,
             args.crop_scale,
             args.region_source,
+            rdp_epsilon=args.rdp_epsilon,
         )
 
     all_shifted_strokes = []
@@ -606,7 +616,7 @@ def main():
     global_stroke_id = 1
     for region_number, spec in enumerate(target_specs, start=1):
         bbox = spec["bbox"]
-        strokes = extract_crop_strokes(spec, reference_image, args.crop_scale)
+        strokes = extract_crop_strokes(spec, reference_image, args.crop_scale, rdp_epsilon=args.rdp_epsilon)
         shifted_strokes = offset_strokes(strokes, bbox)
         all_shifted_strokes.extend(shifted_strokes)
 
