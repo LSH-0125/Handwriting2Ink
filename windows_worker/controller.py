@@ -142,13 +142,19 @@ def paper_mask(img):
     return (img[:, :, 0] - img[:, :, 2] >= 8) & (img[:, :, 0] >= 200)
 
 
-def detect_paper_rect(win: winplat.Window, cfg: Config, retries: int = 3) -> Rect | None:
-    """최대화 직후에는 WebView2 가 아직 리레이아웃 중이라 종이가 안 잡힌다. 몇 번 더 본다."""
+def detect_paper_rect(win: winplat.Window, cfg: Config, retries: int = 6) -> Rect | None:
+    """최대화 직후에는 WebView2 가 아직 리레이아웃 중이라 종이가 안 잡힌다.
+
+    검출에 실패하면 창 비율로 추정하는데, 그 값은 종이보다 훨씬 넓어서 획이
+    종이 밖으로 나간다. 즉 조용히 품질이 망가지므로 충분히 재시도한다.
+    """
     for attempt in range(retries):
         rect = _detect_paper_once(win, cfg)
         if rect is not None:
+            if attempt:
+                print(f"종이 검출: {attempt + 1}번째 시도에서 성공")
             return rect
-        time.sleep(0.6)
+        time.sleep(0.8)
     return None
 
 

@@ -34,6 +34,14 @@ paddleocr==3.1.0
 paddlex[ie,multimodal,ocr,trans]==3.1.0
 paddlepaddle==3.0.0
 
+# paddlex 3.1.0 does "from langchain.docstore.document import Document",
+# a module that langchain 1.x removed. paddlex declares langchain with no
+# upper bound, so a fresh install picks 1.x and then
+#   import paddleocr -> ModuleNotFoundError: No module named 'langchain.docstore'
+# The server still starts; every OCR job fails instead. Verified locally:
+# with langchain<1 the import succeeds.
+langchain<1
+
 # paddlex requires opencv-contrib-python. Installing opencv-python-headless
 # alongside it makes two distributions fight over the same cv2 module, so
 # keep only one. Non-headless needs libGL, installed in the Dockerfile.
