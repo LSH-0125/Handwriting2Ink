@@ -1,0 +1,23 @@
+INFO:     Started server process [24216]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:8813 (Press CTRL+C to quit)
+INFO:     127.0.0.1:51391 - "GET / HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51392 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51393 - "GET /api/jobs HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:51394 - "GET /api/jobs HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:51395 - "GET /api/jobs HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51396 - "GET /api/jobs?k=secret123 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51400 - "POST /api/jobs HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:51401 - "POST /api/jobs HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51402 - "GET /api/worker/jobs/next HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51403 - "GET /api/worker/jobs/next HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:51404 - "GET /api/jobs HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:53564 - "GET / HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53564 - "GET /favicon.ico HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:53564 - "POST /api/jobs HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:56774 - "GET /?k=secret123 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56774 - "GET /favicon.ico HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:56774 - "POST /api/jobs HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56774 - "GET /api/jobs/job_20261117_001719_93ea73 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56774 - "GET /api/jobs/job_20261117_001719_93ea73 HTTP/1.1" 200 OK
