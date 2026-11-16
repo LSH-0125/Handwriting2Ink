@@ -258,6 +258,8 @@ def replay_strokes(
     point_delay: float = 0.004,
     stroke_delay: float = 0.06,
     guard: Window | None = None,
+    progress_every: int = 50,
+    periodic_check: "callable | None" = None,
 ) -> None:
     """획 좌표열을 실제 마우스 입력으로 재생한다.
 
@@ -270,9 +272,21 @@ def replay_strokes(
     pyautogui.PAUSE = 0
     pyautogui.FAILSAFE = True
 
+    total = len(strokes)
+    started = time.time()
     for i, stroke in enumerate(strokes):
         if guard is not None and not is_frontmost(guard):
             raise RuntimeError(f"GoodNotes가 전면이 아닙니다 (stroke {i}에서 중단)")
+        # 수백 획짜리 작업은 몇 분 걸린다. 진행이 보여야 멈춘 것과 구분된다.
+        if progress_every and i and i % progress_every == 0:
+            done = time.time() - started
+            eta = done / i * (total - i)
+            print(f"  필기 {i}/{total}획 ({i * 100 // total}%), 경과 {done:.0f}초, 남은 예상 {eta:.0f}초",
+                  flush=True)
+            # 페이지가 스크롤되면 이후 획이 전부 어긋난 자리에 찍힌다.
+            # 조용히 망가지는 것보다 멈추는 편이 낫다.
+            if periodic_check is not None:
+                periodic_check(i, total)
         pyautogui.moveTo(*stroke[0], duration=0.05)
         pyautogui.mouseDown(button="left")
         try:

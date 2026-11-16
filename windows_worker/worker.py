@@ -14,6 +14,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import sys
 import time
 import traceback
 from dataclasses import replace
@@ -25,6 +26,14 @@ import winplat
 from client import ServerClient, ServerError
 
 HERE = Path(__file__).resolve().parent
+
+# 로그를 파일/파이프로 넘기면 파이썬이 블록 버퍼링을 해서, 수 분짜리 작업 중에
+# 아무것도 안 보인다. 멈춘 것과 구분이 안 되므로 줄 단위로 흘려보낸다.
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(line_buffering=True)
+    except Exception:
+        pass
 
 
 def log(msg: str) -> None:

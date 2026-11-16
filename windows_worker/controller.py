@@ -51,7 +51,12 @@ class Config:
     tool_y: float = 128.0          # 창 상단 기준
     select_pen: bool = True
     detect_paper: bool = True      # 종이 영역을 픽셀로 찾는다
-    paper_margin: float = 0.06     # 종이 안쪽 여백 비율
+    # 종이 안쪽 여백. 획이 종이 가장자리에 닿으면 GoodNotes 가 자동 스크롤을
+    # 해버리고, 그 뒤 획들이 전부 어긋난 자리에 찍힌다(실제로 겪었다).
+    # 가장자리를 넉넉히 비워 그 트리거를 피한다.
+    paper_margin: float = 0.12
+    scroll_guard: bool = True        # 그리는 중 페이지가 움직였는지 감시
+    scroll_tolerance: float = 12.0   # 허용 이동량(px)
     verify_drawn: bool = True      # 그린 뒤 실제로 픽셀이 바뀌었는지 확인
 
     # 대상 노트북. 워커는 "그 시점 열려 있는 페이지" 에 그리므로, 엉뚱한
@@ -404,8 +409,26 @@ def inject(strokes_path: Path, cfg: Config, execute: bool = False) -> dict[str, 
         time.sleep(cfg.countdown)
 
     ensure_front(win, cfg, "필기 직전")
+
+    baseline = detect_paper_rect(win, cfg, retries=2) if cfg.scroll_guard else None
+
+    def _check(done_count: int, total: int) -> None:
+        if baseline is None:
+            return
+        now = _detect_paper_once(win, cfg)
+        if now is None:
+            return
+        shift = max(abs(now[0] - baseline[0]), abs(now[1] - baseline[1]))
+        if shift > cfg.scroll_tolerance:
+            raise RuntimeError(
+                f"필기 중 페이지가 움직였습니다 ({shift:.0f}px, {done_count}/{total}획 지점). "
+                "이후 획이 전부 어긋나므로 중단합니다. "
+                "GoodNotes 에서 페이지를 고정하거나 paper_margin 을 더 키우세요."
+            )
+
     started = time.time()
-    winplat.replay_strokes(mapped, cfg.point_delay, cfg.stroke_delay, guard=win)
+    winplat.replay_strokes(mapped, cfg.point_delay, cfg.stroke_delay, guard=win,
+                           periodic_check=_check if cfg.scroll_guard else None)
     summary["elapsed_sec"] = round(time.time() - started, 1)
 
     if cfg.verify_drawn:
