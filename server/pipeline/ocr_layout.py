@@ -15,10 +15,46 @@ from pathlib import Path
 from typing import Iterable
 
 PROJECT_ROOT = Path(__file__).resolve().parent
-os.environ.setdefault("PADDLE_PDX_CACHE_HOME", str(PROJECT_ROOT / ".paddlex_cache"))
+
+
+def _ascii_safe_cache_root() -> Path:
+    """캐시를 둘 위치. 비ASCII 경로를 피한다.
+
+    PaddlePaddle 의 C++ 추론 레이어는 Windows 에서 비ASCII 경로의 모델 파일을
+    열지 못한다. 파일은 분명히 존재하는데
+        RuntimeError: (NotFound) Cannot open file ...inference.json
+    로 죽는다. 이 레포가 'OneDrive\바탕 화면' 아래에 있으면 기본 캐시 경로가
+    통째로 한글이라 OCR 이 아예 돌지 않는다. (실측 확인: 같은 모델을 ASCII
+    경로에 두면 엔진 생성이 성공한다.)
+
+    경로가 ASCII 면 기존대로 레포 안에 두고, 아니면 ASCII 가 보장되는
+    사용자 캐시 폴더로 옮긴다.
+    """
+    try:
+        str(PROJECT_ROOT).encode("ascii")
+        return PROJECT_ROOT
+    except UnicodeEncodeError:
+        pass
+
+    for env_name in ("LOCALAPPDATA", "XDG_CACHE_HOME", "TMPDIR", "TEMP"):
+        base = os.environ.get(env_name)
+        if not base:
+            continue
+        try:
+            str(base).encode("ascii")
+        except UnicodeEncodeError:
+            continue
+        return Path(base) / "h2i_pipeline_cache"
+
+    import tempfile
+    return Path(tempfile.gettempdir()) / "h2i_pipeline_cache"
+
+
+CACHE_ROOT = _ascii_safe_cache_root()
+os.environ.setdefault("PADDLE_PDX_CACHE_HOME", str(CACHE_ROOT / ".paddlex_cache"))
 os.environ.setdefault("PADDLE_PDX_MODEL_SOURCE", "bos")
-os.environ.setdefault("MPLCONFIGDIR", str(PROJECT_ROOT / ".mplconfig"))
-os.environ.setdefault("XDG_CACHE_HOME", str(PROJECT_ROOT / ".xdg_cache"))
+os.environ.setdefault("MPLCONFIGDIR", str(CACHE_ROOT / ".mplconfig"))
+os.environ.setdefault("XDG_CACHE_HOME", str(CACHE_ROOT / ".xdg_cache"))
 
 import cv2
 from img_io import imread_safe, imwrite_safe
@@ -57,7 +93,9 @@ def parse_args() -> argparse.Namespace:
 
 def ensure_runtime_dirs() -> None:
     for name in (".paddlex_cache", ".mplconfig", ".xdg_cache"):
-        (PROJECT_ROOT / name).mkdir(parents=True, exist_ok=True)
+        (CACHE_ROOT / name).mkdir(parents=True, exist_ok=True)
+    if CACHE_ROOT != PROJECT_ROOT:
+        print(f"[OCR] 캐시 경로: {CACHE_ROOT} (레포 경로에 비ASCII 문자가 있어 옮김)")
 
 
 def resolve_output_dir(input_path: Path, output_dir_arg: str | None) -> Path:
