@@ -96,7 +96,9 @@
 </div>
 
 <script>
-const MAX_DIM = 2000, QUALITY = 0.9, POLL_MS = 2000, TIMEOUT_MS = 300000;
+// 실제 손글씨 한 페이지는 워커가 그리는 데만 3분 넘게 걸린다. 거기에
+// 서버 OCR(콜드스타트 포함)이 더 붙으므로 300초로는 모자란다.
+const MAX_DIM = 2000, QUALITY = 0.9, POLL_MS = 2000, TIMEOUT_MS = 900000;
 
 // 공개 배포에서는 주소에 ?k=<키> 를 붙여 연다. 로컬이면 없어도 된다.
 const KEY = new URLSearchParams(location.search).get('k') || '';
@@ -120,8 +122,17 @@ function tick() {
 }
 
 // 원본 사진은 수 MB 라 그대로 올리면 느리다. 서버도 어차피 1600px 로 줄인다.
+//
+// imageOrientation 을 명시하는 이유: 스펙 기본값이 'from-image' 로 바뀌었지만
+// 구형 사파리는 'none' 이 기본이었다. 그 경우 세로로 찍은 사진이 90도 누운 채
+// 업로드되고, 손글씨가 돌아가 있으니 OCR 이 통째로 빗나간다. 에러도 안 난다.
 async function downscale(file) {
-  const bmp = await createImageBitmap(file);
+  let bmp;
+  try {
+    bmp = await createImageBitmap(file, { imageOrientation: 'from-image' });
+  } catch (e) {
+    bmp = await createImageBitmap(file);   // 옵션 인자를 모르는 구형 브라우저
+  }
   const longest = Math.max(bmp.width, bmp.height);
   const scale = longest > MAX_DIM ? MAX_DIM / longest : 1;
   const w = Math.round(bmp.width * scale), h = Math.round(bmp.height * scale);
@@ -218,7 +229,7 @@ async function poll(id) {
     setStatus(job.message || job.status, job.failed ? 'err' : 'run');
     if (job.done || job.failed) return job;
     if (Date.now() > deadline) {
-      throw new Error('300초 안에 끝나지 않았습니다. 마지막 상태: ' + job.status
+      throw new Error(Math.round(TIMEOUT_MS / 1000) + '초 안에 끝나지 않았습니다. 마지막 상태: ' + job.status
                       + '. 워커 PC에서 worker.py 가 돌고 있는지 확인하세요.');
     }
     await new Promise(r => setTimeout(r, POLL_MS));

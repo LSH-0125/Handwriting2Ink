@@ -1,41 +1,40 @@
-# --- 웹 서버 ---
+# --- web server ---
 fastapi
 uvicorn[standard]
-# SQLAlchemy 2.1 부터 postgresql:// 의 기본 DBAPI 가 psycopg2 -> psycopg(v3) 로
-# 바뀌었다. 고정하지 않으면 어느 날 갑자기 'No module named psycopg' 로 죽는다.
-# app/db.py 에서 드라이버를 명시적으로 박지만, 버전도 같이 고정해 둔다.
-sqlalchemy==2.1.8
-psycopg[binary]
-psycopg2-binary
 python-multipart
 python-dotenv
 aiofiles
 pydantic-settings
 
-# --- 파이프라인 ---
+# SQLAlchemy 2.1 changed the default PostgreSQL DBAPI from psycopg2 to
+# psycopg (v3). Without a pin this silently breaks with
+# "ModuleNotFoundError: No module named 'psycopg'".
+# app/db.py also pins the driver in the URL; both drivers are installed so
+# an explicit +psycopg2 URL keeps working.
+sqlalchemy==2.1.8
+psycopg[binary]
+psycopg2-binary
+
+# --- pipeline ---
 numpy
 matplotlib
 scikit-image
 
 # --- OCR ---
-# 버전을 반드시 고정해야 한다.
-#
-# paddlex 3.2.0 부터 modelscope 를 '마커 없이' 의존성으로 요구하고,
-# modelscope 는 import 시점에 torch 를 끌어온다. 그 결과
+# These versions MUST stay pinned.
+# paddlex >= 3.2.0 requires modelscope unconditionally, and modelscope
+# imports torch at import time. That chain
 #   paddleocr -> paddlex -> modelscope -> torch
-# 체인이 생겨서 이미지가 비대해지고, torch DLL 이 틀어지면
-# `import paddleocr` 자체가 실패한다. (이 프로젝트의 Windows 노트북이
-#  정확히 이 상태로 깨져 있었다.)
-#
-# paddlex 3.1.0 이하는 깨끗하다. paddleocr 은 paddlex 를 '>=' 로만 걸기
-# 때문에 paddleocr 만 고정하면 최신 paddlex 로 해석된다. 둘 다 고정한다.
-#
-# 검증: pip dry-run 해석 결과 101개 패키지, torch/modelscope/nvidia-* 없음.
+# bloats the image and makes "import paddleocr" fail outright when the
+# torch install is not perfect. paddlex <= 3.1.0 is clean.
+# paddleocr only constrains paddlex with ">=", so pinning paddleocr alone
+# still resolves to the newest paddlex. Pin both.
+# Verified with a pip dry-run: 101 packages, no torch / modelscope / nvidia-*.
 paddleocr==3.1.0
 paddlex[ie,multimodal,ocr,trans]==3.1.0
 paddlepaddle==3.0.0
 
-# paddlex 가 opencv-contrib-python 을 요구한다. headless 와 같이 깔면
-# 두 배포판이 같은 cv2 모듈을 덮어써서 충돌하므로 하나만 둔다.
-# non-headless 라 libGL 이 필요하고, Dockerfile 에서 libgl1 을 설치한다.
+# paddlex requires opencv-contrib-python. Installing opencv-python-headless
+# alongside it makes two distributions fight over the same cv2 module, so
+# keep only one. Non-headless needs libGL, installed in the Dockerfile.
 opencv-contrib-python==4.10.0.84

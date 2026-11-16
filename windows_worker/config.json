@@ -3,6 +3,7 @@
     "expected_notebook": "소페_시연용",
     "tab_ref": "notebook_ref.png",
     "tab_match_tolerance": 8.0,
+    "max_draw_seconds": 240.0,
 
     "target_rect": null,
     "detect_paper": true,

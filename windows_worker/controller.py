@@ -62,6 +62,11 @@ class Config:
     tab_ref: str = "notebook_ref.png"   # --calibrate 로 만든다
     tab_match_tolerance: float = 8.0    # 평균 절대차 허용치 (0-255)
 
+    # 그리기 시간 예산(초). 실제 손글씨 한 페이지는 400획 4만점 정도가 나오고
+    # 그대로 그리면 3분 반이 넘는다. 예산을 넘으면 sample_step 을 올려
+    # 점을 솎아내고, 몇 배로 솎았는지 로그에 남긴다. 0 이면 무제한.
+    max_draw_seconds: float = 240.0
+
 
 def parse_rect(value: str | None) -> Rect | None:
     if not value:
@@ -272,6 +277,39 @@ def ensure_front(win: winplat.Window, cfg: Config, what: str) -> None:
     raise RuntimeError(f"{what} 후 GoodNotes 전면 복귀 실패")
 
 
+def estimate_seconds(strokes: list[list[Point]], cfg: Config) -> float:
+    """그리기에 걸릴 시간 추정.
+
+    실측 기준점: 33획 2,617점 -> 15.2초 (point_delay 0.004, stroke_delay 0.06).
+    획당 상수 0.15 는 moveTo(duration=0.05) + mouseDown/Up 왕복이다.
+    약간 보수적으로 나와서 예산 판단에 쓰기 좋다.
+    """
+    points = sum(len(s) for s in strokes)
+    return points * cfg.point_delay + len(strokes) * (cfg.stroke_delay + 0.15)
+
+
+def fit_time_budget(strokes: list[list[Point]], cfg: Config) -> tuple[list[list[Point]], int]:
+    """예산을 넘으면 점을 더 솎아낸다. (솎은 결과, 최종 sample_step) 을 돌려준다."""
+    step = max(1, cfg.sample_step)
+    if cfg.max_draw_seconds <= 0:
+        return strokes, step
+
+    est = estimate_seconds(strokes, cfg)
+    if est <= cfg.max_draw_seconds:
+        return strokes, step
+
+    base = strokes
+    for extra in range(2, 13):
+        candidate = sample_strokes(base, extra)
+        if estimate_seconds(candidate, cfg) <= cfg.max_draw_seconds:
+            print(f"시간 예산 초과({est:.0f}초 > {cfg.max_draw_seconds:.0f}초) "
+                  f"-> 점을 1/{extra} 로 솎음 ({estimate_seconds(candidate, cfg):.0f}초)")
+            return candidate, step * extra
+    worst = sample_strokes(base, 12)
+    print(f"WARN: 1/12 까지 솎아도 {estimate_seconds(worst, cfg):.0f}초 걸립니다. 그대로 진행합니다.")
+    return worst, step * 12
+
+
 def plan(strokes_path: Path, win: winplat.Window, cfg: Config) -> tuple[list[list[Point]], Rect]:
     target = cfg.target_rect
     if target is None and cfg.detect_paper:
@@ -286,6 +324,7 @@ def plan(strokes_path: Path, win: winplat.Window, cfg: Config) -> tuple[list[lis
 
     strokes = load_strokes(strokes_path)
     strokes = sample_strokes(strokes, cfg.sample_step)
+    strokes, _ = fit_time_budget(strokes, cfg)
     source = stroke_bbox(strokes)
     mapped = map_strokes(strokes, source, target, cfg.fit)
     winplat.assert_on_screen(stroke_bbox(mapped), "매핑된 stroke 영역")
@@ -305,8 +344,10 @@ def inject(strokes_path: Path, cfg: Config, execute: bool = False) -> dict[str, 
         "target_rect": tuple(round(v, 1) for v in target),
         "executed": False,
     }
+    summary["estimated_sec"] = round(estimate_seconds(mapped, cfg), 1)
     print(f"window : {win.exe} {win.rect}")
-    print(f"strokes: {summary['stroke_count']}  points: {summary['point_count']}")
+    print(f"strokes: {summary['stroke_count']}  points: {summary['point_count']}  "
+          f"예상 {summary['estimated_sec']}초")
     print(f"target : {summary['target_rect']}")
 
     if not execute:
