@@ -1,7 +1,11 @@
 # --- 웹 서버 ---
 fastapi
 uvicorn[standard]
-sqlalchemy
+# SQLAlchemy 2.1 부터 postgresql:// 의 기본 DBAPI 가 psycopg2 -> psycopg(v3) 로
+# 바뀌었다. 고정하지 않으면 어느 날 갑자기 'No module named psycopg' 로 죽는다.
+# app/db.py 에서 드라이버를 명시적으로 박지만, 버전도 같이 고정해 둔다.
+sqlalchemy==2.1.8
+psycopg[binary]
 psycopg2-binary
 python-multipart
 python-dotenv
