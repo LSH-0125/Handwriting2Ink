@@ -67,6 +67,13 @@ class Config:
     # 점을 솎아내고, 몇 배로 솎았는지 로그에 남긴다. 0 이면 무제한.
     max_draw_seconds: float = 240.0
 
+    # 이미 필기가 있는 페이지에 덧그리면 결과가 겹쳐 못 쓰게 된다.
+    # 워커는 페이지를 넘기지 않으므로(자동 페이지 넘김은 GUI 리스크가 크다)
+    # 최소한 조용히 겹치지는 않도록 경고하거나 막는다.
+    # 'warn' = 경고만, 'abort' = 거부, 'off' = 검사 안 함
+    on_dirty_page: str = "warn"
+    dirty_page_threshold: int = 500   # 필기 영역 내 어두운 픽셀 수
+
 
 def parse_rect(value: str | None) -> Rect | None:
     if not value:
@@ -362,6 +369,15 @@ def inject(strokes_path: Path, cfg: Config, execute: bool = False) -> dict[str, 
         ensure_front(win, cfg, "펜 도구 클릭")
 
     before = paper_fingerprint(win, target) if cfg.verify_drawn else None
+
+    if cfg.on_dirty_page != "off" and before is not None:
+        if before > cfg.dirty_page_threshold:
+            msg = (f"필기 영역에 이미 잉크가 있습니다 (어두운 픽셀 {before:,}개). "
+                   f"그대로 그리면 겹칩니다. GoodNotes 에서 빈 페이지로 넘기세요.")
+            if cfg.on_dirty_page == "abort":
+                raise RuntimeError(msg)
+            print(f"WARN: {msg}")
+        summary["ink_before"] = before
 
     if cfg.countdown > 0:
         print(f"{cfg.countdown:.1f}초 후 필기 시작. 중단은 마우스를 화면 좌상단 모서리로.")

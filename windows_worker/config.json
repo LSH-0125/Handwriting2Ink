@@ -4,6 +4,8 @@
     "tab_ref": "notebook_ref.png",
     "tab_match_tolerance": 8.0,
     "max_draw_seconds": 240.0,
+    "on_dirty_page": "warn",
+    "dirty_page_threshold": 500,
 
     "target_rect": null,
     "detect_paper": true,
