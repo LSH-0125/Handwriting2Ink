@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Handwriting2Ink</title>
+<style>
+  :root {
+    --bg: #0f1115; --card: #171a21; --line: #272b35;
+    --fg: #e8eaf0; --muted: #9aa3b2; --accent: #4c8dff;
+    --ok: #39c07c; --err: #ff6b6b; --warn: #f0a62e;
+  }
+  @media (prefers-color-scheme: light) {
+    :root { --bg:#f5f6f8; --card:#fff; --line:#e2e5ea; --fg:#1a1d23; --muted:#687080; }
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body {
+    margin: 0; padding: 24px 16px 48px; background: var(--bg); color: var(--fg);
+    font: 16px/1.55 -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", sans-serif;
+    max-width: 680px; margin-inline: auto;
+  }
+  h1 { font-size: 22px; margin: 0 0 4px; letter-spacing: -.02em; }
+  .sub { color: var(--muted); font-size: 14px; margin-bottom: 24px; }
+  .card {
+    background: var(--card); border: 1px solid var(--line); border-radius: 14px;
+    padding: 18px; margin-bottom: 14px;
+  }
+  .card h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em;
+             color: var(--muted); margin: 0 0 12px; font-weight: 600; }
+  button {
+    width: 100%; padding: 16px; font-size: 17px; font-weight: 600; font-family: inherit;
+    border: 0; border-radius: 11px; background: var(--accent); color: #fff;
+    cursor: pointer; transition: opacity .15s;
+  }
+  button:disabled { opacity: .4; cursor: default; }
+  button.ghost { background: transparent; color: var(--accent); border: 1px solid var(--line); }
+  input[type=file] { display: none; }
+  label.pick {
+    display: block; padding: 16px; text-align: center; border-radius: 11px;
+    border: 1px dashed var(--line); color: var(--accent); font-weight: 600; cursor: pointer;
+  }
+  img#preview { width: 100%; border-radius: 10px; margin-top: 14px; display: none; }
+  .row { display: flex; justify-content: space-between; gap: 12px; padding: 7px 0;
+         border-bottom: 1px solid var(--line); font-size: 14px; }
+  .row:last-child { border-bottom: 0; }
+  .row span:first-child { color: var(--muted); }
+  .row span:last-child { font-variant-numeric: tabular-nums; text-align: right; }
+  #status { display: flex; gap: 11px; align-items: flex-start; font-size: 15px; }
+  .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted);
+         flex: none; margin-top: 7px; }
+  .dot.run { background: var(--accent); animation: pulse 1.1s ease-in-out infinite; }
+  .dot.ok { background: var(--ok); } .dot.err { background: var(--err); }
+  @keyframes pulse { 0%,100% { opacity: 1 } 50% { opacity: .25 } }
+  .msg { font-size: 14px; margin-top: 10px; padding: 11px 13px; border-radius: 9px;
+         white-space: pre-wrap; word-break: break-word; display: none; }
+  .msg.err { background: rgba(255,107,107,.12); color: var(--err); display: block; }
+  .msg.warn { background: rgba(240,166,46,.12); color: var(--warn); display: block; }
+  .hint { color: var(--muted); font-size: 13px; margin-top: 10px; }
+</style>
+</head>
+<body>
+
+<h1>Handwriting2Ink</h1>
+<div class="sub">손글씨 사진을 GoodNotes 필기로 옮깁니다.</div>
+
+<div class="card">
+  <h2>이미지</h2>
+  <label class="pick" for="file" id="pickLabel">사진 선택 / 촬영</label>
+  <input type="file" id="file" accept="image/*">
+  <img id="preview" alt="">
+</div>
+
+<div class="card">
+  <h2>실행</h2>
+  <button id="run" disabled>GoodNotes에 필기</button>
+  <div id="status" style="margin-top:16px">
+    <div class="dot" id="dot"></div>
+    <div id="statusText">사진을 고르면 시작할 수 있습니다.</div>
+  </div>
+  <div class="msg" id="err"></div>
+  <div class="msg" id="warn"></div>
+</div>
+
+<div class="card" id="jobCard" style="display:none">
+  <h2>Job</h2>
+  <div class="row"><span>ID</span><span id="jobId">-</span></div>
+  <div class="row"><span>상태</span><span id="jobStatus">-</span></div>
+  <div class="row" id="strokeRow" style="display:none"><span>획 수</span><span id="jobStrokes">-</span></div>
+  <div class="row"><span>경과</span><span id="elapsed">-</span></div>
+</div>
+
+<div class="hint">
+  워커 PC의 GoodNotes에서 <b>소페_시연용</b> 노트북이 열려 있어야 합니다.
+  필기가 끝나면 공유 링크를 통해 이 아이패드로 동기화됩니다.
+</div>
+
+<script>
+const MAX_DIM = 2000, QUALITY = 0.9, POLL_MS = 2000, TIMEOUT_MS = 300000;
+
+// 공개 배포에서는 주소에 ?k=<키> 를 붙여 연다. 로컬이면 없어도 된다.
+const KEY = new URLSearchParams(location.search).get('k') || '';
+const authHeaders = KEY ? { 'X-H2I-Key': KEY } : {};
+
+const $ = id => document.getElementById(id);
+let blob = null, startedAt = 0, timer = null;
+
+function setStatus(text, kind) {
+  $('statusText').textContent = text;
+  $('dot').className = 'dot' + (kind ? ' ' + kind : '');
+}
+function showMsg(el, text) {
+  const n = $(el);
+  if (!text) { n.style.display = 'none'; n.textContent = ''; return; }
+  n.textContent = text;
+  n.className = 'msg ' + (el === 'err' ? 'err' : 'warn');
+}
+function tick() {
+  $('elapsed').textContent = startedAt ? Math.round((Date.now() - startedAt) / 1000) + '초' : '-';
+}
+
+// 원본 사진은 수 MB 라 그대로 올리면 느리다. 서버도 어차피 1600px 로 줄인다.
+async function downscale(file) {
+  const bmp = await createImageBitmap(file);
+  const longest = Math.max(bmp.width, bmp.height);
+  const scale = longest > MAX_DIM ? MAX_DIM / longest : 1;
+  const w = Math.round(bmp.width * scale), h = Math.round(bmp.height * scale);
+  const canvas = document.createElement('canvas');
+  canvas.width = w; canvas.height = h;
+  canvas.getContext('2d').drawImage(bmp, 0, 0, w, h);
+  bmp.close();
+  return await new Promise(res => canvas.toBlob(res, 'image/jpeg', QUALITY));
+}
+
+$('file').addEventListener('change', async e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  showMsg('err'); showMsg('warn');
+  setStatus('이미지를 준비하고 있습니다...', 'run');
+  try {
+    blob = await downscale(file);
+    const url = URL.createObjectURL(blob);
+    $('preview').src = url;
+    $('preview').style.display = 'block';
+    $('pickLabel').textContent = '다른 사진 선택';
+    $('run').disabled = false;
+    setStatus('준비됐습니다. (' + Math.round(blob.size / 1024) + ' KB)');
+  } catch (ex) {
+    blob = null;
+    $('run').disabled = true;
+    setStatus('이미지를 읽지 못했습니다.', 'err');
+    showMsg('err', String(ex));
+  }
+});
+
+$('run').addEventListener('click', async () => {
+  if (!blob) return;
+  $('run').disabled = true;
+  $('file').disabled = true;
+  showMsg('err'); showMsg('warn');
+  startedAt = Date.now();
+  timer = setInterval(tick, 1000); tick();
+
+  try {
+    setStatus('이미지를 업로드하고 있습니다...', 'run');
+    const form = new FormData();
+    form.append('file', blob, 'input.jpg');
+    const created = await postJSON('/api/jobs', form);
+
+    $('jobCard').style.display = '';
+    $('jobId').textContent = created.job_id;
+
+    const job = await poll(created.job_id);
+    if (job.failed) throw new Error(job.error_message || job.message || '서버 job 실패');
+
+    setStatus('GoodNotes에 기록했습니다. 잠시 후 이 아이패드에 나타납니다.', 'ok');
+
+    // 확인 보고 실패가 본작업 성공을 뒤집지 않게 한다.
+    try {
+      await fetch('/api/jobs/' + created.job_id + '/delivered',
+                  { method: 'POST', headers: authHeaders });
+      const fin = await fetchJob(created.job_id);
+      $('jobStatus').textContent = fin.status;
+    } catch (ex) {
+      showMsg('warn', '필기는 끝났지만 서버에 확인 보고를 못 했습니다: ' + ex.message);
+    }
+  } catch (ex) {
+    setStatus('처리에 실패했습니다.', 'err');
+    showMsg('err', ex.message);
+  } finally {
+    clearInterval(timer);
+    $('run').disabled = false;
+    $('file').disabled = false;
+  }
+});
+
+async function postJSON(url, body) {
+  const r = await fetch(url, { method: 'POST', body, headers: authHeaders });
+  if (!r.ok) throw new Error('HTTP ' + r.status + ': ' + (await r.text()).slice(0, 300));
+  return r.json();
+}
+async function fetchJob(id) {
+  const r = await fetch('/api/jobs/' + id, { cache: 'no-store', headers: authHeaders });
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  return r.json();
+}
+
+// done / failed 가 될 때까지. 반드시 끝난다.
+async function poll(id) {
+  const deadline = Date.now() + TIMEOUT_MS;
+  for (;;) {
+    const job = await fetchJob(id);
+    $('jobStatus').textContent = job.status;
+    if (job.stroke_count != null) {
+      $('strokeRow').style.display = '';
+      $('jobStrokes').textContent = job.stroke_count;
+    }
+    setStatus(job.message || job.status, job.failed ? 'err' : 'run');
+    if (job.done || job.failed) return job;
+    if (Date.now() > deadline) {
+      throw new Error('300초 안에 끝나지 않았습니다. 마지막 상태: ' + job.status
+                      + '. 워커 PC에서 worker.py 가 돌고 있는지 확인하세요.');
+    }
+    await new Promise(r => setTimeout(r, POLL_MS));
+  }
+}
+</script>
+</body>
+</html>

@@ -49,3 +49,12 @@ AGENTS.md
 
 #docs
 docs/
+
+# Windows worker runtime
+windows_worker/work/
+windows_worker/probe_out/
+
+server/.env
+server/h2i.db
+server/storage/
+windows_worker/notebook_ref.png

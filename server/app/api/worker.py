@@ -1,77 +1,87 @@
-from fastapi import APIRouter, Depends, HTTPException, Header, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, Header
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
+
 from app.db import get_db
 from app.models.job import Job
 from app.services.job_service import update_status
 from app.config import settings
-import os, shutil
 
 router = APIRouter(prefix="/api/worker")
 
-def verify_token(authorization: str = Header(...)):
-    token = authorization.replace("Bearer ", "")
+# Windows 워커 전용 계약.
+# 맥 워커의 클립보드 .bin 업로드 경로는 제거했다. GoodNotes for Windows 는
+# 복사 시 시스템 클립보드에 타입 이름 문자열만 올리고 잉크를 주지 않으므로
+# .bin 을 만들 수 없다. 전달은 GoodNotes 계정 동기화가 담당한다.
+
+
+def verify_token(authorization: str | None = Header(default=None)):
+    # Header(...) 로 두면 헤더가 없을 때 401 이 아니라 422 가 나간다.
+    if not authorization:
+        raise HTTPException(status_code=401, detail="Authorization 헤더가 없습니다")
+    token = authorization.replace("Bearer ", "").strip()
     if token != settings.WORKER_TOKEN:
         raise HTTPException(status_code=401, detail="Unauthorized")
 
+
 @router.get("/jobs/next")
 def get_next_job(db: Session = Depends(get_db), _=Depends(verify_token)):
-    job = db.query(Job).filter(Job.status == "stroke_ready").first()
+    query = db.query(Job).filter(Job.status == "stroke_ready").order_by(Job.created_at)
+    try:
+        # 워커를 2대 이상 띄워도 같은 잡을 중복 할당하지 않는다.
+        # SQLite 에서는 무시되므로 그 경우엔 워커 1대 전제가 유지된다.
+        job = query.with_for_update(skip_locked=True).first()
+    except Exception:
+        db.rollback()
+        job = query.first()
+
     if not job:
         return {"job": None}
 
-    update_status(db, job.id, "assigned_to_worker")
+    update_status(db, job.id, "assigned_to_worker", "워커에 할당됨")
     return {
         "job": {
             "job_id": job.id,
             "status": "assigned_to_worker",
-            "strokes_url": f"/api/worker/jobs/{job.id}/strokes"
+            "strokes_url": f"/api/worker/jobs/{job.id}/strokes",
         }
     }
+
 
 @router.get("/jobs/{job_id}/strokes")
 def get_strokes(job_id: str, db: Session = Depends(get_db), _=Depends(verify_token)):
     job = db.query(Job).filter(Job.id == job_id).first()
     if not job or not job.strokes_path:
-        raise HTTPException(status_code=404)
+        raise HTTPException(status_code=404, detail="strokes 를 찾을 수 없습니다")
     return FileResponse(job.strokes_path, media_type="application/json")
+
 
 @router.post("/jobs/{job_id}/status")
 def report_status(job_id: str, body: dict,
                   db: Session = Depends(get_db), _=Depends(verify_token)):
-    update_status(db, job_id, body["status"], body.get("message"))
-    return {"ok": True}
-
-@router.post("/jobs/{job_id}/binary")
-async def upload_binary(
-    job_id: str,
-    file: UploadFile = File(...),
-    pasteboard_type: str = "com.goodnotesapp.goodnotes5.notes",
-    binary_size: int = 0,
-    db: Session = Depends(get_db),
-    _=Depends(verify_token)
-):
     job = db.query(Job).filter(Job.id == job_id).first()
     if not job:
-        raise HTTPException(status_code=404)
+        raise HTTPException(status_code=404, detail="Job not found")
+    status = body.get("status")
+    if not status:
+        raise HTTPException(status_code=400, detail="status 가 필요합니다")
 
-    bin_path = os.path.join(job.output_dir, "goodnotes_clipboard_item0.bin")
-    with open(bin_path, "wb") as f:
-        shutil.copyfileobj(file.file, f)
+    if status == "drawn":
+        job.stroke_count = body.get("stroke_count")
+        db.commit()
 
-    job.binary_path = bin_path
-    job.pasteboard_type = pasteboard_type
-    job.binary_size = binary_size
-    db.commit()
-    update_status(db, job_id, "bin_ready")
-    return {"job_id": job_id, "status": "bin_ready"}
+    update_status(db, job_id, status, body.get("message"))
+    return {"ok": True}
+
 
 @router.post("/jobs/{job_id}/fail")
 def report_failure(job_id: str, body: dict,
                    db: Session = Depends(get_db), _=Depends(verify_token)):
     job = db.query(Job).filter(Job.id == job_id).first()
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
     job.error_code = body.get("error_code")
-    job.error_message = body.get("error_message")
+    job.error_message = (body.get("error_message") or "")[:4000]
     db.commit()
-    update_status(db, job_id, "failed", body.get("error_message"))
+    update_status(db, job_id, "failed", job.error_message)
     return {"ok": True}

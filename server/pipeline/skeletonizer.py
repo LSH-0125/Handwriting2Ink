@@ -7,6 +7,7 @@ Zhang-Suen 기반 스켈레톤화 모듈
 import time
 
 import cv2
+from img_io import imread_safe, imwrite_safe
 import numpy as np
 from skimage import img_as_ubyte
 from skimage.morphology import skeletonize
@@ -17,7 +18,7 @@ def load_and_preprocess(image_input, target_size=None):
     (파일 경로 또는 OpenCV BGR numpy 배열 입력 지원)
     """
     if isinstance(image_input, str):
-        img = cv2.imread(image_input)
+        img = imread_safe(image_input)
         if img is None:
             raise FileNotFoundError(f"이미지를 로드할 수 없습니다: {image_input}")
     else:

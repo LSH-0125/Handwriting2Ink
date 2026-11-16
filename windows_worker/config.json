@@ -1,0 +1,23 @@
+{
+  "controller": {
+    "expected_notebook": "소페_시연용",
+    "tab_ref": "notebook_ref.png",
+    "tab_match_tolerance": 8.0,
+
+    "target_rect": null,
+    "detect_paper": true,
+    "paper_margin": 0.06,
+    "target_inset": 0.12,
+    "fit": "contain",
+    "sample_step": 1,
+    "point_delay": 0.004,
+    "stroke_delay": 0.06,
+    "countdown": 2.0,
+    "maximize": true,
+    "select_pen": true,
+    "verify_drawn": true,
+    "pen_tool_dx": -210,
+    "select_tool_dx": -279,
+    "tool_y": 128
+  }
+}

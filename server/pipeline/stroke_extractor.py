@@ -15,9 +15,18 @@ import os
 import sys
 import numpy as np
 import cv2
+from img_io import imread_safe, imwrite_safe
 import matplotlib
-if matplotlib.get_backend() == 'agg':  # 이미 다른 백엔드(Agg 등)가 설정된 경우 유지
-    matplotlib.use('TkAgg')
+
+# 로컬에서 --show 로 그림을 띄울 때만 인터랙티브 백엔드로 바꾼다.
+# 서버/컨테이너에는 디스플레이도 tkinter 도 없으므로 Agg 를 유지해야 한다.
+# get_backend() 는 소문자를 돌려주므로(예: 'agg') 헤드리스에서 이 조건이 참이 된다.
+# MPLBACKEND 가 지정돼 있으면 사용자의 선택을 존중하고 건드리지 않는다.
+if matplotlib.get_backend().lower() == "agg" and not os.environ.get("MPLBACKEND"):
+    try:
+        matplotlib.use("TkAgg")
+    except Exception:
+        pass
 import matplotlib.pyplot as plt
 from collections import defaultdict, deque
 
@@ -992,7 +1001,7 @@ def main():
     # 오버레이 이미지 저장 (옵션)
     if args.save:
         overlay = create_stroke_overlay(img, strokes, thickness=3)
-        cv2.imwrite(overlay_path, overlay)
+        imwrite_safe(overlay_path, overlay)
         print(f"오버레이 이미지 저장: {overlay_path}")
     
     print("\n완료!")

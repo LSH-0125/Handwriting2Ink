@@ -1,3 +1,4 @@
+# --- 웹 서버 ---
 fastapi
 uvicorn[standard]
 sqlalchemy
@@ -6,9 +7,31 @@ python-multipart
 python-dotenv
 aiofiles
 pydantic-settings
+
+# --- 파이프라인 ---
 numpy
-opencv-python-headless
 matplotlib
 scikit-image
-paddleocr
+
+# --- OCR ---
+# 버전을 반드시 고정해야 한다.
+#
+# paddlex 3.2.0 부터 modelscope 를 '마커 없이' 의존성으로 요구하고,
+# modelscope 는 import 시점에 torch 를 끌어온다. 그 결과
+#   paddleocr -> paddlex -> modelscope -> torch
+# 체인이 생겨서 이미지가 비대해지고, torch DLL 이 틀어지면
+# `import paddleocr` 자체가 실패한다. (이 프로젝트의 Windows 노트북이
+#  정확히 이 상태로 깨져 있었다.)
+#
+# paddlex 3.1.0 이하는 깨끗하다. paddleocr 은 paddlex 를 '>=' 로만 걸기
+# 때문에 paddleocr 만 고정하면 최신 paddlex 로 해석된다. 둘 다 고정한다.
+#
+# 검증: pip dry-run 해석 결과 101개 패키지, torch/modelscope/nvidia-* 없음.
+paddleocr==3.1.0
+paddlex[ie,multimodal,ocr,trans]==3.1.0
 paddlepaddle==3.0.0
+
+# paddlex 가 opencv-contrib-python 을 요구한다. headless 와 같이 깔면
+# 두 배포판이 같은 cv2 모듈을 덮어써서 충돌하므로 하나만 둔다.
+# non-headless 라 libGL 이 필요하고, Dockerfile 에서 libgl1 을 설치한다.
+opencv-contrib-python==4.10.0.84

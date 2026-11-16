@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 
 import cv2
+from img_io import imread_safe, imwrite_safe
 import numpy as np
 
 PROJECT_ROOT = Path(__file__).resolve().parent
@@ -193,7 +194,7 @@ def resolve_input_image(input_path_value: str) -> Path:
 
 def read_image_unicode_safe(path: Path) -> np.ndarray | None:
     """Read an image reliably on Windows paths that may include non-ASCII chars."""
-    image = cv2.imread(str(path))
+    image = imread_safe(str(path))
     if image is not None:
         return image
 
@@ -351,10 +352,10 @@ def save_crop_debug_outputs(
         skeleton_path = debug_dir / f"{prefix}_skeleton.png"
         overlay_path = debug_dir / f"{prefix}_skeleton_overlay.png"
 
-        cv2.imwrite(str(scaled_crop_path), scaled_crop)
-        cv2.imwrite(str(binary_path), binary_preview)
-        cv2.imwrite(str(skeleton_path), skeleton_preview)
-        cv2.imwrite(str(overlay_path), overlay)
+        imwrite_safe(str(scaled_crop_path), scaled_crop)
+        imwrite_safe(str(binary_path), binary_preview)
+        imwrite_safe(str(skeleton_path), skeleton_preview)
+        imwrite_safe(str(overlay_path), overlay)
 
         summary.append(
             {
@@ -458,13 +459,13 @@ def save_merged_debug_outputs(
     stroke_black_path = output_prefix.with_name(f"{output_prefix.name}_stroke_black.png")
     summary_path = output_prefix.with_name(f"{output_prefix.name}_summary.json")
 
-    cv2.imwrite(str(merged_path), merged_canvas)
+    imwrite_safe(str(merged_path), merged_canvas)
     _, gray, binary = load_and_preprocess(merged_canvas)
     skeleton, _, _ = skeletonize_zhang(binary)
     strokes = extract_strokes(skeleton, image_gray=gray, smooth_window=smooth_window)
 
-    cv2.imwrite(str(binary_path), 255 - binary)
-    cv2.imwrite(str(skeleton_path), 255 - skeleton)
+    imwrite_safe(str(binary_path), 255 - binary)
+    imwrite_safe(str(skeleton_path), 255 - skeleton)
     save_result_image(
         strokes,
         merged_canvas,

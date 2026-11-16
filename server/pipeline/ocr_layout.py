@@ -21,6 +21,7 @@ os.environ.setdefault("MPLCONFIGDIR", str(PROJECT_ROOT / ".mplconfig"))
 os.environ.setdefault("XDG_CACHE_HOME", str(PROJECT_ROOT / ".xdg_cache"))
 
 import cv2
+from img_io import imread_safe, imwrite_safe
 import numpy as np
 from paddleocr import PaddleOCR
 
@@ -69,7 +70,7 @@ def resolve_output_dir(input_path: Path, output_dir_arg: str | None) -> Path:
 
 
 def read_image_unicode_safe(path: Path) -> np.ndarray | None:
-    image = cv2.imread(str(path))
+    image = imread_safe(str(path))
     if image is not None:
         return image
 
@@ -439,7 +440,7 @@ def draw_overlay(image: np.ndarray, raw_text_regions: list[dict], merged_text_re
 
 
 def save_mask(path: Path, mask: np.ndarray) -> None:
-    cv2.imwrite(str(path), mask)
+    imwrite_safe(str(path), mask)
 
 
 def save_crops(image: np.ndarray, regions: list[dict], region_type: str, output_dir: Path) -> None:
@@ -448,7 +449,7 @@ def save_crops(image: np.ndarray, regions: list[dict], region_type: str, output_
     for index, region in enumerate(regions, start=1):
         x, y, w, h = region["bbox"]
         crop = image[y : y + h, x : x + w]
-        cv2.imwrite(str(crops_dir / f"{region_type}_{index:03d}.png"), crop)
+        imwrite_safe(str(crops_dir / f"{region_type}_{index:03d}.png"), crop)
 
 
 def save_regions_json(
@@ -506,7 +507,7 @@ def main() -> None:
     shape_regions = extract_shape_regions(shape_candidate_mask)
 
     overlay = draw_overlay(image, raw_text_regions, merged_text_regions, shape_regions)
-    cv2.imwrite(str(output_dir / "layout_overlay.png"), overlay)
+    imwrite_safe(str(output_dir / "layout_overlay.png"), overlay)
     save_mask(output_dir / "text_mask.png", text_mask)
     save_mask(output_dir / "shape_mask.png", shape_candidate_mask)
     save_regions_json(
