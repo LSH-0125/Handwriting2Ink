@@ -190,12 +190,24 @@ def tab_strip_rect(win: winplat.Window) -> Rect:
     return x + w * 0.03, y + h * 0.035, w * 0.53, h * 0.05
 
 
+# 탭 비교용 정규화 크기. 창 크기가 달라도 같은 해상도로 맞춰 비교한다.
+TAB_NORM_SIZE = (600, 40)
+
+
 def grab_tab_strip(win: winplat.Window):
+    """탭 줄을 고정 해상도 흑백으로 가져온다.
+
+    창이 최대화됐는지에 따라 크롭 픽셀 크기가 달라지므로, 그대로 비교하면
+    보정 때와 창 상태가 다를 때 멀쩡한 노트북을 거부한다(실제로 겪었다).
+    고정 크기로 리샘플해서 창 크기와 무관하게 만든다.
+    """
     import numpy as np
+    from PIL import Image
     import pyautogui
 
     r = tuple(int(v) for v in winplat.clamp_to_screen(tab_strip_rect(win)))
-    return np.array(pyautogui.screenshot(region=r).convert("L")).astype(int)
+    img = pyautogui.screenshot(region=r).convert("L").resize(TAB_NORM_SIZE, Image.BILINEAR)
+    return np.array(img).astype(int)
 
 
 def calibrate_tab(win: winplat.Window, cfg: Config) -> Path:
@@ -220,10 +232,12 @@ def check_tab(win: winplat.Window, cfg: Config) -> tuple[bool, str]:
                       f"'{cfg.expected_notebook}' 을 열고 --calibrate 를 한 번 실행하면 "
                       "이후 다른 노트북에 잘못 그리는 것을 막을 수 있습니다.")
 
-    ref = np.array(Image.open(path).convert("L")).astype(int)
+    ref = np.array(
+        Image.open(path).convert("L").resize(TAB_NORM_SIZE, Image.BILINEAR)
+    ).astype(int)
     cur = grab_tab_strip(win)
     if ref.shape != cur.shape:
-        return False, f"탭 영역 크기가 다릅니다 (기준 {ref.shape}, 현재 {cur.shape}). 창 크기를 바꿨다면 재보정하세요."
+        return False, f"탭 기준 이미지를 정규화하지 못했습니다 (기준 {ref.shape}, 현재 {cur.shape}). 재보정하세요."
     diff = float(np.abs(ref - cur).mean())
     ok = diff <= cfg.tab_match_tolerance
     return ok, f"탭 평균차 {diff:.1f} (허용 {cfg.tab_match_tolerance})"

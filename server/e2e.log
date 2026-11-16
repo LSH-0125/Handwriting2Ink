@@ -1,0 +1,26 @@
+INFO:     Started server process [20776]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+INFO:     127.0.0.1:54601 - "GET /health HTTP/1.1" 200 OK
+INFO:     10.113.199.230:54602 - "GET / HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54615 - "GET /health HTTP/1.1" 200 OK
+INFO:     10.113.199.230:54616 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51914 - "POST /api/jobs HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51916 - "GET /api/jobs/job_20261117_024505_bedb29 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51921 - "GET /api/jobs/job_20261117_024505_bedb29 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64504 - "GET /api/jobs/job_20261117_024505_bedb29 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64288 - "GET /api/jobs/job_20261117_024505_bedb29 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64290 - "GET /api/jobs/job_20261117_024505_bedb29 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64298 - "GET /api/jobs/job_20261117_024505_bedb29 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64302 - "GET /api/jobs/job_20261117_024505_bedb29 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64303 - "GET /api/jobs/job_20261117_024505_bedb29 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64554 - "GET /api/jobs/job_20261117_024505_bedb29 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64555 - "GET /api/jobs/job_20261117_024505_bedb29 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56392 - "GET /api/jobs/job_20261117_024505_bedb29 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57206 - "GET /api/jobs/job_20261117_024505_bedb29 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61823 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61824 - "GET /api/worker/jobs/next HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61825 - "GET /api/worker/jobs/job_20261117_024505_bedb29/strokes HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61826 - "POST /api/worker/jobs/job_20261117_024505_bedb29/status HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57168 - "POST /api/worker/jobs/job_20261117_024505_bedb29/status HTTP/1.1" 200 OK

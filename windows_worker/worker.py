@@ -34,8 +34,9 @@ def log(msg: str) -> None:
 def preflight(cfg: controller.Config) -> None:
     """돌리기 전에 환경을 전수 확인한다. 잡을 잡고 나서 실패하면 잡이 버려진다."""
     log(f"DPI: {winplat.ensure_dpi_aware()}")
-    win = winplat.find_goodnotes()          # 앱 아닌 브라우저 탭이면 여기서 거부된다
-    win = winplat.restore_if_minimized(win)
+    # 보정은 최대화 상태에서 했으므로 같은 상태로 맞춘 뒤 비교한다.
+    # (acquire_window 가 복원 + 전면화 + 최대화를 모두 한다)
+    win = controller.acquire_window(cfg)
     winplat.assert_on_screen(win.rect, "GoodNotes 창")
     log(f"GoodNotes: {win.exe} {win.cls} rect={win.rect}")
     visible = winplat.clamp_to_screen(win.rect)
