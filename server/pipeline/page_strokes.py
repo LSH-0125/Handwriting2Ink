@@ -36,7 +36,8 @@ import numpy as np  # noqa: E402
 
 from img_io import imread_safe, imwrite_safe  # noqa: E402
 from preprocess import (BinarizeParams, FilterParams, binarize, estimate_background,  # noqa: E402
-                        filter_components, paper_quad, rectify, simplify_stroke, to_gray)
+                        filter_components, paper_quad, rectify, simplify_stroke, to_gray,
+                        estimate_stroke_width)
 from skeletonizer import skeletonize_zhang  # noqa: E402
 from stroke_extractor import extract_strokes  # noqa: E402
 
@@ -59,6 +60,9 @@ DEFAULTS = dict(
     min_len=3,
     rdp=0.8,                # 점 단순화 허용 오차(px, 종이 좌표)
     max_seg=12.0,           # 단순화 후 최대 구간 길이
+    sw_target=10.0,         # 획 두께가 [sw_min, sw_max] 밖이면 이 두께가 되게 축척 (실사진 비교: 5 는 굵은 매직에서 획 누락)
+    sw_min=2.5,
+    sw_max=14.0,
 )
 
 
@@ -79,6 +83,22 @@ def extract_page(img: np.ndarray, p: dict) -> tuple[list[np.ndarray], dict]:
     bp = BinarizeParams(method=p["method"], bg_ksize=p["bg_ksize"], floor=p["floor"])
     bg = estimate_background(g, bp.bg_ksize) if bp.method.startswith("norm") else None
     binary = binarize(g, bp, bg)
+
+    # 획 두께 정규화. 배경 창/두께 필터/단순화 허용오차가 전부 '4~5px 펜' 기준이라
+    # 굵은 매직(실측 27px)은 두께 필터에 글자가 통째로 지워졌다(46획 -> 2획).
+    # 두께를 재서 목표 두께가 되도록 작업 해상도를 바꾸고 다시 이진화한다.
+    sw = estimate_stroke_width(filter_components(binary, FilterParams(min_area=p["min_area"])))
+    meta["stroke_width"] = round(sw, 1)
+    if sw > 0 and (sw > p["sw_max"] or sw < p["sw_min"]):
+        f2 = float(np.clip(p["sw_target"] / sw, 0.15, 3.0))
+        f2 = min(f2, 3000 / max(work.shape[:2]))
+        work = cv2.resize(work, None, fx=f2, fy=f2,
+                          interpolation=cv2.INTER_AREA if f2 < 1 else cv2.INTER_CUBIC)
+        f *= f2
+        g = to_gray(work)
+        bg = estimate_background(g, bp.bg_ksize) if bp.method.startswith("norm") else None
+        binary = binarize(g, bp, bg)
+        meta["sw_rescale"] = round(f2, 3)
     binary = filter_components(binary, FilterParams(min_area=p["min_area"], max_thickness=p["max_thickness"],
                                                     drop_border=p["drop_border"]))
     skel, _, _ = skeletonize_zhang(binary)
