@@ -516,6 +516,25 @@ def fit_time_budget(strokes: list[list[Point]], cfg: Config) -> tuple[list[list[
     return worst, step * 12
 
 
+def stroke_landed(stroke) -> bool:
+    """방금 그린 획이 화면에 잉크로 찍혔는지 본다(획 위 점들의 절반 이상이 어두운가)."""
+    import numpy as np
+    import pyautogui
+
+    time.sleep(0.15)                      # GoodNotes 렌더 대기
+    pts = np.array([(p[0], p[1]) for p in stroke], float)
+    x0, y0 = pts.min(axis=0) - 4
+    x1, y1 = pts.max(axis=0) + 4
+    img = np.array(pyautogui.screenshot(region=(int(x0), int(y0), int(x1 - x0) + 1, int(y1 - y0) + 1))
+                   .convert("L")).astype(int)
+    hits = 0
+    for x, y in pts:
+        cx, cy = int(round(x - x0)), int(round(y - y0))
+        win = img[max(0, cy - 2):cy + 3, max(0, cx - 2):cx + 3]
+        hits += int(win.size > 0 and win.min() < 150)
+    return hits >= 0.5 * len(pts)
+
+
 def read_stroke_width_rel(strokes_path: Path) -> float | None:
     try:
         page = json.loads(strokes_path.read_text(encoding="utf-8")).get("page") or {}
@@ -748,7 +767,8 @@ def inject(strokes_path: Path, cfg: Config, execute: bool = False,
     else:
         winplat.replay_strokes(playback, 0.0, cfg.stroke_delay, guard=win,
                                periodic_check=_check if (cfg.scroll_guard or progress_cb) else None,
-                               pre_down=cfg.pre_down, down_dwell=cfg.down_dwell)
+                               pre_down=cfg.pre_down, down_dwell=cfg.down_dwell,
+                               landed_check=stroke_landed)
     summary["elapsed_sec"] = round(time.time() - started, 1)
 
     if cfg.verify_drawn:

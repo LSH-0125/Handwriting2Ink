@@ -279,6 +279,8 @@ def replay_strokes(
     periodic_check: "callable | None" = None,
     pre_down: float = 0.0,
     down_dwell: float = 0.0,
+    landed_check: "callable | None" = None,
+    check_first: int = 3,
 ) -> None:
     """획 좌표열을 실제 마우스 입력으로 재생한다.
 
@@ -317,6 +319,21 @@ def replay_strokes(
             # 조용히 망가지는 것보다 멈추는 편이 낫다.
             if periodic_check is not None:
                 periodic_check(i, total)
+        for attempt in range(3 if (landed_check is not None and i < check_first) else 1):
+            _draw_one(stroke, point_delay, pre_down, down_dwell, pyautogui)
+            # 도구 버튼을 누른 직후 첫 획(들)을 GoodNotes 가 삼키는 경우가 있었다
+            # (A 의 가로줄과 오른다리가 통째로 빠짐). 첫 몇 획은 찍혔는지 보고 다시 그린다.
+            if landed_check is None or i >= check_first or landed_check(stroke):
+                break
+            print(f"  획 {i} 이 반영되지 않아 다시 그림 ({attempt + 1})", flush=True)
+            time.sleep(0.3)
+        if stroke_delay > 0:
+            time.sleep(stroke_delay)
+    return
+
+
+def _draw_one(stroke, point_delay, pre_down, down_dwell, pyautogui) -> None:
+    if True:
         pyautogui.moveTo(stroke[0][0], stroke[0][1])
         if pre_down > 0:
             time.sleep(pre_down)
@@ -331,8 +348,6 @@ def replay_strokes(
                     time.sleep(d)
         finally:
             pyautogui.mouseUp(button="left")
-        if stroke_delay > 0:
-            time.sleep(stroke_delay)
 
 
 def _interpolate(a: Point, b: Point, steps: int) -> list[Point]:

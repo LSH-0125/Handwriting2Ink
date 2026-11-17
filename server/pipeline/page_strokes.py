@@ -125,7 +125,42 @@ def extract_page(img: np.ndarray, p: dict) -> tuple[list[np.ndarray], dict]:
             pts = simplify_stroke(pts, p["rdp"], p["max_seg"])
         out.append(pts)
     meta.update(width=float(W0), height=float(H0))
+    out = drop_border_lines(out, W0, H0)
+    if not meta["rectified"] and out:
+        # 종이를 못 찾았으면 사진 프레임은 의미가 없다(책상, 빈 벽 포함). 내용 영역에
+        # 여백을 붙여 페이지로 쓴다. 안 그러면 글씨가 페이지 구석에 작게 그려진다.
+        allp = np.concatenate(out)
+        x0, y0 = allp.min(axis=0)
+        x1, y1 = allp.max(axis=0)
+        m = 0.08 * max(x1 - x0, y1 - y0, 1.0)
+        x0, y0 = max(0.0, x0 - m), max(0.0, y0 - m)
+        out = [s - np.array([x0, y0], np.float32) for s in out]
+        meta.update(width=float(min(W0, x1 + m) - x0), height=float(min(H0, y1 + m) - y0),
+                    content_crop=[round(float(x0), 1), round(float(y0), 1)])
+        if meta.get("stroke_width_rel"):
+            meta["stroke_width_rel"] = round(meta["stroke_width_rel"] * W0 / meta["width"], 5)
     return out, meta, binary, work
+
+
+def drop_border_lines(strokes, W: float, H: float, band: float = 0.08) -> list:
+    """사진 테두리를 따라 붙은 곧은 선(종이 끝 그림자, 책상 경계)을 뺀다.
+
+    테두리에서 band 이내에만 있고, 그 테두리와 나란하게 길쭉한 획이 대상이다.
+    실사용 사진에서 종이 오른쪽 끝 그림자가 점선처럼 18개 획으로 잡혀 그려졌다.
+    """
+    keep = []
+    bx, by = band * W, band * H
+    for s in strokes:
+        xs, ys = s[:, 0], s[:, 1]
+        dx, dy = float(np.ptp(xs)), float(np.ptp(ys))
+        near_lr = (xs.max() < bx) or (xs.min() > W - bx)
+        near_tb = (ys.max() < by) or (ys.min() > H - by)
+        vertical = dy >= 3 * max(dx, 1.0)
+        horizontal = dx >= 3 * max(dy, 1.0)
+        if (near_lr and (vertical or len(s) <= 3)) or (near_tb and (horizontal or len(s) <= 3)):
+            continue
+        keep.append(s)
+    return keep
 
 
 def render_preview(strokes, width: float, height: float, max_side: int = 1400) -> np.ndarray:
