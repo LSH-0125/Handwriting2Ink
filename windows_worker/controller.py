@@ -535,6 +535,33 @@ def stroke_landed(stroke) -> bool:
     return hits >= 0.5 * len(pts)
 
 
+def dismiss_tool_bar(win: winplat.Window, target, cfg: Config) -> None:
+    """펜 설정 바를 닫는다. 바가 열린 채 그리면 첫 획들이 씹힌다(사용자 확인).
+
+    종이 왼쪽 회색 여백을 한 번 클릭한다. 클릭 지점이 실제로 회색 배경인지
+    (종이 크림색/툴바 파랑/버튼이 아닌지) 픽셀로 확인하고, 아니면 누르지 않는다.
+    """
+    import numpy as np
+    import pyautogui
+
+    x0, y0, w, h = win.rect
+    tx, ty, tw, th = target
+    # 종이 왼쪽 여백의 가운데, 세로는 필기 영역 가운데 (좌상단 실행취소/좌하단 쪽번호 회피)
+    px = (x0 + 150 + (tx - 40)) / 2.0
+    py = ty + th / 2.0
+    if tx - (x0 + 150) < 60:
+        print("펜 설정 바 닫기: 회색 여백이 좁아 생략")
+        return
+    pix = np.array(pyautogui.screenshot(region=(int(px) - 4, int(py) - 4, 8, 8)).convert("RGB")).astype(int)
+    r, g, b = pix.reshape(-1, 3).mean(axis=0)
+    if not (200 <= min(r, g, b) and max(r, g, b) <= 240 and abs(r - b) < 8):
+        print(f"펜 설정 바 닫기: 클릭 지점이 회색 배경이 아니라 생략 (rgb {r:.0f},{g:.0f},{b:.0f})")
+        return
+    winplat.click((px, py))
+    time.sleep(0.5)
+    print(f"펜 설정 바 닫기: 여백 클릭 {tuple(round(v) for v in (px, py))}")
+
+
 def read_stroke_width_rel(strokes_path: Path) -> float | None:
     try:
         page = json.loads(strokes_path.read_text(encoding="utf-8")).get("page") or {}
@@ -720,7 +747,8 @@ def inject(strokes_path: Path, cfg: Config, execute: bool = False,
 
     if cfg.select_pen:
         select_pen_width(win, cfg, read_stroke_width_rel(strokes_path))
-        ensure_front(win, cfg, "펜 굵기")
+        dismiss_tool_bar(win, target, cfg)
+        ensure_front(win, cfg, "펜 설정 바 닫기")
 
     before = paper_fingerprint(win, target) if cfg.verify_drawn else None
 
