@@ -135,3 +135,13 @@ def stageG():
     for pmin in [1000, 1400, 2000]:
         out.append(dict(b, name=f"G2_pmin={pmin}", page_min=pmin))
     return out
+
+
+def stageH():
+    """끝 늘이기(extend) x 잉크 위 잇기(chain_ink). 단위: 획 두께."""
+    b = _best_b()
+    out = []
+    for e in [0, 0.4, 0.6, 1.0]:
+        for c in [0, 0.6, 1.0, 1.6]:
+            out.append(dict(b, name=f"H_ext={e}_chain={c}", extend=e, chain_ink=c))
+    return out

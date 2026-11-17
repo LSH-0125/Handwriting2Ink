@@ -69,6 +69,14 @@ class Config:
     select_tool_dx: float = -279.0
     tool_y: float = 128.0          # 창 상단 기준
     select_pen: bool = True
+    # 펜 굵기 자동 선택. 파이프라인이 준 획 두께(종이 폭 대비)로 GoodNotes 의
+    # 가늘게/보통/굵게 버튼을 고른다. 굵은 매직 사진(폭의 2.3%)을 가는 펜으로
+    # 그리면 같은 글씨라도 빈약해 보인다. 버튼은 펜 선택 시 나오는 보조 바에
+    # 있고 창 중앙 기준 x 오프셋이다(실측: -51, -1, +49 / 창 상단 +197).
+    pen_width_auto: bool = True
+    pen_width_dx: tuple = (-51.0, -1.0, 49.0)
+    pen_width_y: float = 197.0
+    pen_width_bounds: tuple = (0.006, 0.013)   # 이 미만 가늘게, 사이 보통, 이상 굵게
     detect_paper: bool = True      # 종이 영역을 픽셀로 찾는다
     # 종이 안쪽 여백. 획이 종이 가장자리에 닿으면 GoodNotes 가 자동 스크롤을
     # 해버리고, 그 뒤 획들이 전부 어긋난 자리에 찍힌다(실제로 겪었다).
@@ -508,6 +516,40 @@ def fit_time_budget(strokes: list[list[Point]], cfg: Config) -> tuple[list[list[
     return worst, step * 12
 
 
+def read_stroke_width_rel(strokes_path: Path) -> float | None:
+    try:
+        page = json.loads(strokes_path.read_text(encoding="utf-8")).get("page") or {}
+        v = page.get("stroke_width_rel")
+        return float(v) if v else None
+    except Exception:
+        return None
+
+
+def select_pen_width(win: winplat.Window, cfg: Config, rel: float | None) -> None:
+    """획 두께에 맞는 펜 굵기 버튼을 누른다. 보조 바가 안 보이면 아무것도 안 누른다."""
+    import numpy as np
+    import pyautogui
+
+    if not cfg.pen_width_auto or rel is None:
+        return
+    lo, hi = cfg.pen_width_bounds
+    idx = 0 if rel < lo else (1 if rel < hi else 2)
+    x0, y0, w, _ = win.rect
+    cx = x0 + w / 2.0
+    y = y0 + cfg.pen_width_y
+    # 보조 바 확인: 버튼 사이 지점이 흰색(종이 크림색이 아님)이어야 한다
+    probe = (int(cx + (cfg.pen_width_dx[0] + cfg.pen_width_dx[1]) / 2), int(y - 14))
+    px = np.array(pyautogui.screenshot(region=(probe[0] - 3, probe[1] - 3, 6, 6)).convert("RGB")).astype(int)
+    r, g, b = px.reshape(-1, 3).mean(axis=0)
+    if not (min(r, g, b) > 238 and abs(r - b) < 6):
+        print(f"펜 굵기 바가 안 보여 굵기는 그대로 둡니다 (rgb {r:.0f},{g:.0f},{b:.0f})")
+        return
+    name = ["가늘게", "보통", "굵게"][idx]
+    print(f"펜 굵기: {name} (획 두께 = 종이 폭의 {rel * 100:.2f}%)")
+    winplat.click((cx + cfg.pen_width_dx[idx], y))
+    time.sleep(0.3)
+
+
 def read_page_meta(strokes_path: Path) -> tuple[float, float] | None:
     """파이프라인이 종이 좌표계(page)를 주면 그 크기를 돌려준다.
 
@@ -656,6 +698,10 @@ def inject(strokes_path: Path, cfg: Config, execute: bool = False,
             winplat.click(pen)
             time.sleep(0.4)
             ensure_front(win, cfg, "펜 도구 클릭")
+
+    if cfg.select_pen:
+        select_pen_width(win, cfg, read_stroke_width_rel(strokes_path))
+        ensure_front(win, cfg, "펜 굵기")
 
     before = paper_fingerprint(win, target) if cfg.verify_drawn else None
 

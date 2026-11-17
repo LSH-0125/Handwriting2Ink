@@ -336,3 +336,102 @@ def estimate_stroke_width(binary: np.ndarray) -> float:
     order = np.argsort(w)
     cw = np.cumsum(wt[order])
     return float(w[order][np.searchsorted(cw, cw[-1] / 2.0)])
+
+
+def _end_dir(s: np.ndarray, at_start: bool, k: int = 4) -> np.ndarray | None:
+    """획 끝의 진행 방향(바깥쪽) 단위벡터."""
+    if len(s) < 2:
+        return None
+    a, b = (s[min(k, len(s) - 1)], s[0]) if at_start else (s[-1 - min(k, len(s) - 1)], s[-1])
+    d = b - a
+    n = float(np.hypot(*d))
+    return d / n if n > 1e-6 else None
+
+
+def extend_ends(strokes: list[np.ndarray], ink: np.ndarray, max_ext: float) -> list[np.ndarray]:
+    """획 양 끝을 진행 방향으로 잉크가 끝나는 곳까지(최대 max_ext) 늘린다.
+
+    세선은 획 두께의 절반쯤 안쪽에서 끝난다. 굵은 매직일수록 글자 끝이 짧아지고,
+    교차점에서 갈라진 획 사이가 벌어진다(A 꼭짓점이 열림). 잉크 밖으로는 안
+    늘리므로 없는 선이 생기지 않는다.
+    """
+    H, W = ink.shape
+    out = []
+    for s in strokes:
+        s = np.asarray(s, np.float32)
+        if len(s) < 2 or max_ext < 1:
+            out.append(s)
+            continue
+        parts = [s]
+        for at_start in (True, False):
+            d = _end_dir(s, at_start)
+            if d is None:
+                continue
+            p0 = s[0] if at_start else s[-1]
+            last = None
+            for t in np.arange(1.0, max_ext + 0.5, 1.0):
+                q = p0 + d * t
+                x, y = int(round(q[0])), int(round(q[1]))
+                if not (0 <= x < W and 0 <= y < H) or ink[y, x] == 0:
+                    break
+                last = q
+            if last is not None:
+                if at_start:
+                    parts.insert(0, last[None].astype(np.float32))
+                else:
+                    parts.append(last[None].astype(np.float32))
+        out.append(np.concatenate(parts, axis=0))
+    return out
+
+
+def chain_on_ink(strokes: list[np.ndarray], ink: np.ndarray, max_gap: float,
+                 max_turn_deg: float = 70.0) -> list[np.ndarray]:
+    """끝점이 가깝고, 그 사이가 잉크이고, 방향이 이어지는 두 획을 한 획으로 잇는다.
+
+    펜 들기 횟수(=필기 시간, 끊겨 보이는 이음매)를 줄인다. 거리만 보는
+    chain_strokes 와 달리 잉크 위인지와 꺾임 각도를 확인해 엉뚱한 연결을 막는다.
+    """
+    from scipy.spatial import cKDTree
+
+    S = [np.asarray(s, np.float32) for s in strokes if len(s) >= 1]
+    H, W = ink.shape
+    cos_lim = np.cos(np.deg2rad(max_turn_deg))
+
+    def on_ink(a, b):
+        n = max(2, int(np.hypot(*(b - a))) + 1)
+        for t in np.linspace(0, 1, n):
+            q = a + (b - a) * t
+            x, y = int(round(q[0])), int(round(q[1]))
+            if not (0 <= x < W and 0 <= y < H) or ink[y, x] == 0:
+                return False
+        return True
+
+    for _ in range(6):
+        ends, owner = [], []
+        for i, s in enumerate(S):
+            ends += [s[0], s[-1]]
+            owner += [(i, True), (i, False)]
+        if len(ends) < 4:
+            break
+        tree = cKDTree(np.array(ends))
+        pairs = sorted(tree.query_pairs(max_gap, output_type="ndarray").tolist(),
+                       key=lambda p: float(np.hypot(*(ends[p[0]] - ends[p[1]]))))
+        used, merged = set(), {}
+        for a, b in pairs:
+            (i, ia), (j, ja) = owner[a], owner[b]
+            if i == j or i in used or j in used:
+                continue
+            pa, pb = ends[a], ends[b]
+            da, db = _end_dir(S[i], ia), _end_dir(S[j], ja)
+            if da is not None and db is not None and float(np.dot(da, -db)) < cos_lim:
+                continue                      # 마주 보며 이어지지 않으면 다른 획이다
+            if not on_ink(pa, pb):
+                continue
+            si = S[i][::-1] if ia else S[i]   # i 의 끝이 이음점이 되게
+            sj = S[j] if ja else S[j][::-1]   # j 의 시작이 이음점이 되게
+            merged[i] = np.concatenate([si, sj], axis=0)
+            used |= {i, j}
+        if not merged:
+            break
+        S = [merged[i] for i in merged] + [s for k, s in enumerate(S) if k not in used]
+    return S

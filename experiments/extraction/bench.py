@@ -158,6 +158,14 @@ def run_extract(img: np.ndarray, regions: dict | None, v: dict) -> list[np.ndarr
         skel, _, _ = skeletonize_zhang(b)
         st = _quiet(extract_strokes, skel, min_stroke_length=min_len, merge_angle=merge,
                     image_gray=g, smooth_window=smooth)
+        st = [np.asarray(p, np.float32) for p in st if len(p)]
+        if v.get("extend") or v.get("chain_ink"):
+            from preprocess import estimate_stroke_width, extend_ends, chain_on_ink
+            swk = estimate_stroke_width(b) or 4.0
+            if v.get("extend"):
+                st = extend_ends(st, b, v["extend"] * swk)
+            if v.get("chain_ink"):
+                st = chain_on_ink(st, b, v["chain_ink"] * swk)
         k = f * ps
         out = [p.astype(np.float32) / k for p in st if len(p)]
         if Minv is not None:

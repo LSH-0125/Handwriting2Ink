@@ -37,7 +37,7 @@ import numpy as np  # noqa: E402
 from img_io import imread_safe, imwrite_safe  # noqa: E402
 from preprocess import (BinarizeParams, FilterParams, binarize, estimate_background,  # noqa: E402
                         filter_components, paper_quad, rectify, simplify_stroke, to_gray,
-                        estimate_stroke_width)
+                        estimate_stroke_width, extend_ends, chain_on_ink)
 from skeletonizer import skeletonize_zhang  # noqa: E402
 from stroke_extractor import extract_strokes  # noqa: E402
 
@@ -60,6 +60,8 @@ DEFAULTS = dict(
     min_len=3,
     rdp=0.8,                # 점 단순화 허용 오차(px, 종이 좌표)
     max_seg=12.0,           # 단순화 후 최대 구간 길이
+    extend=1.0,             # 획 끝을 잉크 안에서 획두께*1.0 까지 연장 (stageH: F1 0.973->0.980)
+    chain=1.6,              # 끝점 간격 <= 획두께*1.6, 사이가 잉크, 꺾임<70도면 잇기 (stageH: 손실 없이 획 수 감소)
     sw_target=10.0,         # 획 두께가 [sw_min, sw_max] 밖이면 이 두께가 되게 축척 (실사진 비교: 5 는 굵은 매직에서 획 누락)
     sw_min=2.5,
     sw_max=14.0,
@@ -105,6 +107,15 @@ def extract_page(img: np.ndarray, p: dict) -> tuple[list[np.ndarray], dict]:
     with contextlib.redirect_stdout(io.StringIO()):
         strokes = extract_strokes(skel, min_stroke_length=p["min_len"], merge_angle=p["merge_angle"],
                                   image_gray=g, smooth_window=p["smooth"])
+    # 끝 늘이기 / 잉크 위 잇기. 거리는 작업 해상도의 획 두께 단위.
+    sw_work = estimate_stroke_width(binary) or 4.0
+    strokes = [np.asarray(s, np.float32) for s in strokes if len(s)]
+    if p["extend"] > 0:
+        strokes = extend_ends(strokes, binary, p["extend"] * sw_work)
+    if p["chain"] > 0:
+        strokes = chain_on_ink(strokes, binary, p["chain"] * sw_work)
+    # 워커가 GoodNotes 펜 굵기를 고를 때 쓴다 (종이 폭 대비 획 두께)
+    meta["stroke_width_rel"] = round(sw_work / f / float(W0), 5)
     out = []
     for s in strokes:
         if len(s) == 0:
@@ -156,7 +167,8 @@ def main() -> None:
     payload = {
         "input_path": str(Path(args.input).resolve()),
         "mode": "page",
-        "page": {"width": meta["width"], "height": meta["height"], "rectified": meta["rectified"]},
+        "page": {"width": meta["width"], "height": meta["height"], "rectified": meta["rectified"],
+                 "stroke_width_rel": meta.get("stroke_width_rel")},
         "coordinate_system": {
             "global_points": "page(종이) 좌표계 px. rectified=true 면 원근 보정된 종이 기준",
             "point_order": "[x, y]",
