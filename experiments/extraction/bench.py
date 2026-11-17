@@ -68,6 +68,7 @@ def _quiet(fn, *a, **k):
 
 
 def run_extract(img: np.ndarray, regions: dict | None, v: dict) -> list[np.ndarray]:
+    Minv_img = img.shape[:2]
     from preprocess import (BinarizeParams, FilterParams, binarize, filter_components,
                             paper_mask, estimate_background, to_gray, simplify_stroke)
     from skeletonizer import skeletonize_zhang
@@ -174,6 +175,26 @@ def run_extract(img: np.ndarray, regions: dict | None, v: dict) -> list[np.ndarr
     else:
         raise ValueError(v["mode"])
 
+    if v.get("ocr_mask") and regions is not None:
+        # OCR 영역 마스크: 페이지 방식으로 추출한 뒤, OCR 영역(+여백) 밖 획을 버린다
+        om = v["ocr_mask"]
+        s = float(regions.get("scale", 1.0))
+        H, W = img.shape[:2] if Minv_img is None else Minv_img
+        mask = np.zeros((H, W), np.uint8)
+        types = om.get("types", ("text", "shape"))
+        for r in regions["regions"]:
+            if r["type"] not in types or (r["type"] == "text" and r["source"] != "ocr_merged"):
+                continue
+            x, y, w, h = [float(t) / s for t in r["bbox"]]
+            pad = om.get("pad", 0.0) * max(h, 1.0) if om.get("rel") else om.get("pad", 0.0) / s
+            cv2.rectangle(mask, (int(x - pad), int(y - pad)), (int(x + w + pad), int(y + h + pad)), 1, -1)
+        keep = []
+        for p in out:
+            xi = np.clip(np.round(p[:, 0]).astype(int), 0, W - 1)
+            yi = np.clip(np.round(p[:, 1]).astype(int), 0, H - 1)
+            if mask[yi, xi].mean() >= om.get("frac", 0.5):
+                keep.append(p)
+        out = keep
     if v.get("chain", 0) > 0:
         from preprocess import chain_strokes
         out = chain_strokes(out, v["chain"])

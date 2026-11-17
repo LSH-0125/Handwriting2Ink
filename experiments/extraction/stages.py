@@ -145,3 +145,13 @@ def stageH():
         for c in [0, 0.6, 1.0, 1.6]:
             out.append(dict(b, name=f"H_ext={e}_chain={c}", extend=e, chain_ink=c))
     return out
+
+
+def stageI():
+    """OCR 영역 마스크(사용자 제안): 페이지 방식 최고 설정 + OCR 영역 밖 획 제거."""
+    b = dict(_best_b(), sw_target=10.0, extend=1.0, chain_ink=1.6)
+    out = [dict(b, name="I0_page_best(현재)")]
+    for types, tn in [(("text",), "text"), (("text", "shape"), "text+shape")]:
+        for pad in [0.0, 0.3, 0.8]:
+            out.append(dict(b, name=f"I_ocr_{tn}_pad{pad}h", ocr_mask=dict(types=types, pad=pad, rel=True)))
+    return out
