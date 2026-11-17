@@ -200,7 +200,7 @@ $('run').addEventListener('click', async () => {
       await fetch('/api/jobs/' + created.job_id + '/delivered',
                   { method: 'POST', headers: authHeaders });
       const fin = await fetchJob(created.job_id);
-      $('jobStatus').textContent = fin.status;
+      $('jobStatus').textContent = ko(fin.status);
     } catch (ex) {
       showMsg('warn', '필기는 끝났지만 서버에 확인 보고를 못 했습니다: ' + ex.message);
     }
@@ -237,6 +237,14 @@ async function fetchJob(id) {
   return r.json();
 }
 
+// 상태 코드를 사람이 읽는 말로. 'delivered' 를 그대로 보여주면 멈춘 것처럼 보였다.
+const STATUS_KO = {
+  uploaded: '업로드됨', extracting_strokes: '획 추출 중', stroke_ready: '필기 대기 중',
+  assigned_to_worker: '워커가 받음', drawing: 'GoodNotes에 쓰는 중', drawn: '필기 완료',
+  delivered: '완료 ✓', failed: '실패',
+};
+const ko = s => STATUS_KO[s] || s;
+
 // 워커가 이보다 오래 폴링하지 않으면 꺼진 것으로 본다(워커 폴링 주기 3초).
 const WORKER_STALE_SEC = 20;
 
@@ -269,7 +277,7 @@ async function poll(id) {
       continue;
     }
     showMsg('warn', workerHint(job));
-    $('jobStatus').textContent = job.status;
+    $('jobStatus').textContent = ko(job.status);
     if (job.stroke_count != null) {
       $('strokeRow').style.display = '';
       $('jobStrokes').textContent = job.stroke_count;
