@@ -64,9 +64,15 @@ def load_strokes(path: Path) -> list[list[Point]]:
     strokes: list[list[Point]] = []
     for raw in raw_strokes:
         points = raw.get("global_points") if isinstance(raw, dict) else raw
-        if not points or len(points) < 2:
+        if not points:
             continue
-        strokes.append([(float(x), float(y)) for x, y in points])
+        pts = [(float(x), float(y)) for x, y in points]
+        if len(pts) == 1:
+            # 점 하나짜리 획은 i 의 점, 마침표 같은 실제 필기다. 버리면 글자가
+            # 틀려진다. 아주 짧은 2점 획으로 바꿔 점으로 찍히게 한다.
+            x, y = pts[0]
+            pts = [(x, y), (x + 0.6, y + 0.6)]
+        strokes.append(pts)
     if not strokes:
         raise ValueError(f"사용 가능한 stroke가 없습니다: {path}")
     return strokes

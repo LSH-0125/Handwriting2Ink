@@ -221,8 +221,14 @@ def find_goodnotes() -> Window:
 
 
 def activate(win: Window, timeout: float = 3.0) -> bool:
-    """mac의 `osascript tell application "Goodnotes" to activate` 대체."""
-    user32.ShowWindow(win.hwnd, SW_RESTORE)
+    """mac의 `osascript tell application "Goodnotes" to activate` 대체.
+
+    SW_RESTORE 는 최소화뿐 아니라 '최대화' 도 풀어 버린다. 무조건 보내면 종이
+    위치를 잰 직후(필기 직전 ensure_front) 창이 작아져 획이 빈 공간에 찍혔다.
+    최소화돼 있을 때만 복원한다.
+    """
+    if user32.IsIconic(win.hwnd):
+        user32.ShowWindow(win.hwnd, SW_RESTORE)
     fg = user32.GetForegroundWindow()
     tid_fg = user32.GetWindowThreadProcessId(fg, None)
     tid_me = kernel32.GetCurrentThreadId()
@@ -247,8 +253,19 @@ def is_frontmost(win: Window) -> bool:
 
 
 def maximize(win: Window) -> Window:
-    user32.ShowWindow(win.hwnd, SW_MAXIMIZE)
-    time.sleep(0.5)
+    """최대화. 이미 최대화돼 있으면 건드리지 않는다.
+
+    WinUI3 창에 SW_MAXIMIZE 를 다시 보내면 원래 크기로 돌아가는 경우가 있었다
+    (실측: 창이 192,192 1440x740 으로 작아진 뒤 획이 종이 밖에 찍혔다).
+    그래서 IsZoomed 로 확인하고, 보낸 뒤에도 최대화가 아니면 한 번 더 보낸다.
+    """
+    if user32.IsZoomed(win.hwnd):
+        return _measure(win.hwnd, win.title, win.cls, win.exe)
+    for _ in range(2):
+        user32.ShowWindow(win.hwnd, SW_MAXIMIZE)
+        time.sleep(0.5)
+        if user32.IsZoomed(win.hwnd):
+            break
     return _measure(win.hwnd, win.title, win.cls, win.exe)
 
 
@@ -260,11 +277,17 @@ def replay_strokes(
     guard: Window | None = None,
     progress_every: int = 50,
     periodic_check: "callable | None" = None,
+    pre_down: float = 0.0,
+    down_dwell: float = 0.0,
 ) -> None:
     """획 좌표열을 실제 마우스 입력으로 재생한다.
 
     mac의 drag 방식 대신 down_move 를 고정으로 쓴다. WinUI3+WebView2 셸에서
     dragTo 반복은 pointer 이벤트가 유실되어 획이 끊긴다.
+
+    점은 (x, y) 또는 (x, y, 대기초) 다. 대기초가 있으면 그 점에 그만큼 머문다.
+    앱은 대략 한 프레임에 한 번 커서 위치를 읽고 Windows 는 WM_MOUSEMOVE 를
+    합치므로, 꼭짓점을 한 프레임보다 짧게 지나가면 그 꼭짓점이 획에서 사라진다.
     """
     ensure_dpi_aware()
     import pyautogui
@@ -276,7 +299,14 @@ def replay_strokes(
     started = time.time()
     for i, stroke in enumerate(strokes):
         if guard is not None and not is_frontmost(guard):
-            raise RuntimeError(f"GoodNotes가 전면이 아닙니다 (stroke {i}에서 중단)")
+            # 획 직후 전면 창이 잠깐 '없음'(0)이 되는 순간이 있다(토스트 알림 등).
+            # 바로 중단하지 말고 한 번 되찾아 본다. 그래도 아니면 중단.
+            time.sleep(0.3)
+            if not is_frontmost(guard):
+                activate(guard)
+                time.sleep(0.5)
+            if not is_frontmost(guard):
+                raise RuntimeError(f"GoodNotes가 전면이 아닙니다 (stroke {i}에서 중단)")
         # 수백 획짜리 작업은 몇 분 걸린다. 진행이 보여야 멈춘 것과 구분된다.
         if progress_every and i and i % progress_every == 0:
             done = time.time() - started
@@ -287,13 +317,18 @@ def replay_strokes(
             # 조용히 망가지는 것보다 멈추는 편이 낫다.
             if periodic_check is not None:
                 periodic_check(i, total)
-        pyautogui.moveTo(*stroke[0], duration=0.05)
+        pyautogui.moveTo(stroke[0][0], stroke[0][1])
+        if pre_down > 0:
+            time.sleep(pre_down)
         pyautogui.mouseDown(button="left")
         try:
-            for x, y in stroke[1:]:
-                pyautogui.moveTo(x, y)
-                if point_delay > 0:
-                    time.sleep(point_delay)
+            if down_dwell > 0:
+                time.sleep(down_dwell)
+            for p in stroke[1:]:
+                pyautogui.moveTo(p[0], p[1])
+                d = p[2] if len(p) > 2 else point_delay
+                if d > 0:
+                    time.sleep(d)
         finally:
             pyautogui.mouseUp(button="left")
         if stroke_delay > 0:

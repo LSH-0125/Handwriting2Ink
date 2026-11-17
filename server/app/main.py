@@ -59,7 +59,9 @@ else:
 
     @app.get("/health")
     def health():
-        return {"status": "ok", "db": DATABASE_URL.split("://", 1)[0]}
+        from app.services import worker_presence
+        return {"status": "ok", "db": DATABASE_URL.split("://", 1)[0],
+                "worker_last_seen_sec": worker_presence.seconds_since()}
 
     @app.get("/")
     def index():

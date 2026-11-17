@@ -7,6 +7,7 @@ It runs the OCR layout stage first, then renders OCR text/shape regions as strok
 from __future__ import annotations
 
 import argparse
+import os
 import json
 import re
 import subprocess
@@ -116,6 +117,16 @@ def parse_args() -> argparse.Namespace:
         "--dry_run",
         action="store_true",
         help="실행하지 않고 호출할 하위 명령만 출력합니다.",
+    )
+    parser.add_argument(
+        "--mode",
+        choices=("page", "ocr"),
+        default=os.environ.get("H2I_STROKE_MODE", "page"),
+        help=(
+            "page = 종이 보정 + 조명 평탄화 후 페이지 전체에서 추출 (기본, OCR 불필요, 수 초). "
+            "ocr = 기존 OCR 영역 crop 방식 (PaddleOCR 필요). "
+            "비교 실험 결과는 experiments/extraction/README.md"
+        ),
     )
     return parser.parse_args()
 
@@ -286,9 +297,20 @@ def main() -> None:
 
     print(f"[pipeline] input: {input_path}")
     print(f"[pipeline] output_dir: {output_dir}")
+    print(f"[pipeline] mode: {args.mode}")
     started_at = datetime.now().astimezone().isoformat(timespec="seconds")
     layout_command = None
     render_command = None
+
+    if args.mode == "page":
+        page_command = [sys.executable, str(PROJECT_ROOT / "page_strokes.py"),
+                        "--input", str(input_path), "--output_dir", str(output_dir), "--overwrite"]
+        run_command(page_command, args.dry_run)
+        if not args.dry_run:
+            finished_at = datetime.now().astimezone().isoformat(timespec="seconds")
+            write_run_meta(output_dir, args, input_path, None, page_command, started_at, finished_at)
+        print("[pipeline] done")
+        return
 
     if not args.skip_layout:
         layout_command = build_layout_command(args, input_path, output_dir)

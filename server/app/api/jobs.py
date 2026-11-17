@@ -1,15 +1,18 @@
 import asyncio
 import os
 import shutil
+from pathlib import Path
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, Header, Query
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from app.db import get_db, SessionLocal
 from app.models.job import Job, JobEvent
 from app.services.job_service import create_job, update_status
 from app.services.stroke_service import run_pipeline
+from app.services import worker_presence
 from app.config import settings
 
 router = APIRouter(prefix="/api/jobs")
@@ -132,6 +135,8 @@ def get_job_status(job_id: str, db: Session = Depends(get_db), _=Depends(verify_
         "stroke_count": job.stroke_count,
         "error_code": job.error_code,
         "error_message": job.error_message,
+        # 워커가 마지막으로 폴링한 뒤 지난 초. None 이면 서버 기동 후 한 번도 안 왔다.
+        "worker_last_seen_sec": worker_presence.seconds_since(),
     }
 
 
@@ -142,3 +147,22 @@ def mark_delivered(job_id: str, db: Session = Depends(get_db), _=Depends(verify_
         raise HTTPException(status_code=404, detail="Job not found")
     update_status(db, job_id, "delivered", "클라이언트 확인 완료")
     return {"job_id": job_id, "status": "delivered"}
+
+
+PREVIEW_NAMES = ("strokes_preview.png", "crop_stroke_composite_black.png")
+
+
+@router.get("/{job_id}/preview")
+def get_preview(job_id: str, db: Session = Depends(get_db), _=Depends(verify_client)):
+    """추출된 획을 그린 미리보기. 필기 전에 무엇이 그려질지 보여준다.
+
+    <img> 태그는 헤더를 못 보내므로 접근키는 ?k= 로 받는다(verify_client 가 처리).
+    """
+    job = db.query(Job).filter(Job.id == job_id).first()
+    if not job or not job.output_dir:
+        raise HTTPException(status_code=404, detail="Job not found")
+    for name in PREVIEW_NAMES:
+        path = Path(job.output_dir) / name
+        if path.exists():
+            return FileResponse(path, media_type="image/png")
+    raise HTTPException(status_code=404, detail="미리보기가 아직 없습니다")

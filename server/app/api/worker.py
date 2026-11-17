@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from app.db import get_db
 from app.models.job import Job
 from app.services.job_service import update_status
+from app.services import worker_presence
 from app.config import settings
 
 router = APIRouter(prefix="/api/worker")
@@ -22,6 +23,8 @@ def verify_token(authorization: str | None = Header(default=None)):
     token = authorization.replace("Bearer ", "").strip()
     if token != settings.WORKER_TOKEN:
         raise HTTPException(status_code=401, detail="Unauthorized")
+    # 인증된 워커 요청은 전부 생존 신호다(폴링, 진행 보고, 다운로드)
+    worker_presence.touch()
 
 
 @router.get("/jobs/next")

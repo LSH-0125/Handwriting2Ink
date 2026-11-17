@@ -58,3 +58,11 @@ server/.env
 server/h2i.db
 server/storage/
 windows_worker/notebook_ref.png
+
+# extraction experiments data/outputs
+experiments/*/_data/
+experiments/**/__pycache__/
+server/e2e.log
+server/*.log
+windows_worker/notebook_ref.paper.json
+windows_worker/work/

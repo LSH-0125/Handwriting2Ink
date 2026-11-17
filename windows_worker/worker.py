@@ -74,7 +74,12 @@ def handle_job(client: ServerClient, job: dict, cfg: controller.Config,
         log(f"strokes 다운로드: {dest}")
         client.report_status(job_id, "drawing", "GoodNotes 주입 시작")
 
-        summary = controller.inject(dest, cfg, execute=execute)
+        def _progress(done: int, total: int) -> None:
+            # 수백 획은 몇 분 걸린다. 아이패드 화면에서 멈춘 것과 구분되도록
+            # 진행률을 서버로 올린다(웹 클라이언트가 message 를 그대로 보여준다).
+            client.report_status(job_id, "drawing", f"필기 중 {done}/{total}획 ({done * 100 // max(total, 1)}%)")
+
+        summary = controller.inject(dest, cfg, execute=execute, progress_cb=_progress)
         if not summary["executed"]:
             log("dry-run 이라 상태 보고를 생략합니다.")
             return
