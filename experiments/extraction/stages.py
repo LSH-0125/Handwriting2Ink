@@ -129,9 +129,9 @@ def stageG():
     작F1(0.3배 축소 합성)과 마sup/마cov(실제 527x249 업로드)를 같이 본다.
     """
     b = _best_b()
-    out = [dict(b, name="G0_none")]
-    for sw in [3.0, 4.0, 5.0, 6.5]:
-        out.append(dict(b, name=f"G1_sw={sw}", sw_target=sw))
+    out = [dict(b, name="G0_none", extend=1.0, chain_ink=1.6)]
+    for sw in [5.0, 8.0, 10.0, 12.0]:
+        out.append(dict(b, name=f"G1_sw={sw}", sw_target=sw, extend=1.0, chain_ink=1.6))
     for pmin in [1000, 1400, 2000]:
         out.append(dict(b, name=f"G2_pmin={pmin}", page_min=pmin))
     return out
